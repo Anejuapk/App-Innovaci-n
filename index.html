@@ -1,0 +1,1901 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hesmiter Lab · Lienzo colaborativo de innovación</title>
+
+<!-- Tailwind CSS (CDN) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Supabase JS v2 (CDN) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Tipografías: Inter (interfaz) + Oswald (títulos de las plantillas, como en las fichas impresas) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          ink:   '#12294A',  // azul marino del logotipo
+          teal:  '#1F8F8C',  // verde azulado del logotipo
+          brand: '#1F63C6',  // azul del logotipo
+          amber: '#F5A524',  // naranja del logotipo
+          sheet: '#E4E6E9',  // gris de las fichas de trabajo
+          paper: '#F6F7F9'
+        },
+        fontFamily: {
+          sans:  ['Inter', 'Roboto', 'system-ui', 'sans-serif'],
+          sheet: ['Oswald', 'Impact', 'Arial Narrow', 'sans-serif']
+        }
+      }
+    }
+  };
+</script>
+
+<style>
+  html, body { height: 100%; }
+  body { font-family: Inter, Roboto, system-ui, sans-serif; color: #12294A; background: #F6F7F9; -webkit-font-smoothing: antialiased; }
+  :focus-visible { outline: 2px solid #1F63C6; outline-offset: 2px; }
+
+  /* ---------- Landing ---------- */
+  .dotgrid { background-image: radial-gradient(#d3d8df 1px, transparent 1px); background-size: 18px 18px; }
+  .hero-title { letter-spacing: -0.035em; line-height: 1.02; }
+  .mini-note { position: absolute; width: 11%; aspect-ratio: 1 / .82; border-radius: 3px; box-shadow: 0 2px 4px rgba(18,41,74,.18); font-size: clamp(6px, .9vw, 10px); font-weight: 700; padding: .5%; display: flex; align-items: center; justify-content: center; text-align: center; line-height: 1.15; }
+  .cursor { position: absolute; top: 0; left: 0; pointer-events: none; }
+  .cursor-a { animation: cursorA 9s ease-in-out infinite; }
+  .cursor-b { animation: cursorB 11s ease-in-out infinite; }
+  @keyframes cursorA { 0%,100% { transform: translate(120%, 260%); } 35% { transform: translate(430%, 150%); } 65% { transform: translate(300%, 520%); } }
+  @keyframes cursorB { 0%,100% { transform: translate(1050%, 700%); } 40% { transform: translate(820%, 330%); } 70% { transform: translate(1150%, 420%); } }
+  @media (prefers-reduced-motion: reduce) { .cursor-a, .cursor-b { animation: none; } }
+
+  /* ---------- Plantillas (fichas) ---------- */
+  .sheet-title { font-family: Oswald, Impact, sans-serif; font-weight: 700; letter-spacing: .01em; color: #33383f; }
+  .sheet-sub   { font-family: Oswald, Impact, sans-serif; font-weight: 500; color: #b3b8bf; }
+  .meta-input  { background: #fff; border: 0; height: 22px; font-size: 12px; padding: 0 6px; border-radius: 3px; width: 100%; color: #12294A; }
+  .meta-label  { font-family: Oswald, sans-serif; font-size: 11px; color: #9aa1a9; letter-spacing: .04em; }
+
+  #board-wrap { background: #E4E6E9; }
+  #board { position: absolute; top: 0; left: 0; width: 1200px; height: 760px; background: #fff; transform-origin: 0 0; overflow: hidden; border-radius: 4px; }
+  .layer { position: absolute; inset: 0; }
+  .decor, .links, .notes { pointer-events: none; }
+  .decor .pe, .notes .note { pointer-events: auto; }
+
+  .zone { position: absolute; border: 1.5px dashed #c9ced5; border-radius: 12px; transition: background-color .15s; }
+  .zone.ellipse { border-radius: 50%; }
+  .zone.none { border-color: transparent; }
+  .zone:hover { background-color: rgba(31, 99, 198, .025); }
+  .zone-head { position: absolute; left: 16px; right: 16px; top: 10px; }
+  .zone-head.bottom { top: auto; bottom: 12px; }
+  .zone-head.middle { top: 50%; transform: translateY(-50%); }
+  .zone-head.right  { text-align: right; }
+  .zone-head.center { text-align: center; }
+  .zone-title { font-family: Oswald, Impact, sans-serif; font-weight: 700; font-size: 24px; color: #7f868f; line-height: 1.05; }
+  .zone-head.middle .zone-title { font-size: 30px; color: #a9afb6; font-weight: 600; }
+  .zone-q { font-size: 14px; font-weight: 500; color: #555c66; line-height: 1.3; }
+  .zone-sub { font-size: 11px; color: #9aa1a9; line-height: 1.35; margin-top: 2px; white-space: pre-line; }
+  .zone-add { position: absolute; top: 8px; font-size: 11px; font-weight: 600; color: #1F63C6; background: #fff; border: 1px solid #d8dde4; border-radius: 999px; padding: 2px 10px; opacity: 0; transition: opacity .15s, background .15s; }
+  .zone-add.add-r { right: 10px; } .zone-add.add-l { left: 10px; }
+  .zone:hover .zone-add, .zone-add:focus-visible { opacity: 1; }
+  .zone-add:hover { background: #eef3fb; }
+
+  .tip { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid #aeb4bc; color: #8a929b; font: 700 10px/1 Inter, sans-serif; cursor: help; vertical-align: 3px; margin-left: 4px; }
+  .tip:hover, .tip:focus { border-color: #1F63C6; color: #1F63C6; }
+  .tip-box { display: none; position: absolute; top: 22px; left: -8px; width: 250px; background: #12294A; color: #fff; font: 500 12px/1.45 Inter, sans-serif; text-align: left; padding: 10px 12px; border-radius: 8px; z-index: 50; box-shadow: 0 8px 24px rgba(18,41,74,.25); white-space: normal; }
+  .zone-head.right .tip-box, .tip.tip-r .tip-box { left: auto; right: -8px; }
+  .tip:hover .tip-box, .tip:focus .tip-box { display: block; }
+  .layer.zones:has(.tip:hover), .layer.zones:has(.tip:focus) { z-index: 4; }
+
+  /* ---------- Post-its ---------- */
+  .note { position: absolute; width: 118px; min-height: 92px; padding: 12px 9px 12px; border-radius: 2px; font-size: 11.5px; font-weight: 700; line-height: 1.28; text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 3px 8px rgba(18,41,74,.12); cursor: grab; user-select: none; touch-action: none; display: flex; align-items: center; justify-content: center; transition: box-shadow .15s, transform .12s; }
+  .note:hover { box-shadow: 0 2px 4px rgba(0,0,0,.14), 0 8px 18px rgba(18,41,74,.18); }
+  .note.dragging { cursor: grabbing; transform: rotate(-2deg) scale(1.03); box-shadow: 0 14px 30px rgba(18,41,74,.28); z-index: 5; }
+  .note.flash { animation: flash 1s ease 2; }
+  @keyframes flash { 50% { box-shadow: 0 0 0 5px rgba(31,99,198,.55); } }
+  .note-text { width: 100%; white-space: pre-wrap; word-break: break-word; outline: none; }
+  .note-text:empty::before { content: 'Doble clic para escribir'; opacity: .55; font-weight: 500; }
+  .note-text[contenteditable="true"] { cursor: text; user-select: text; background: rgba(255,255,255,.18); outline: 2px dashed rgba(0,0,0,.28); outline-offset: 3px; }
+  .note-ctl { position: absolute; opacity: 0; transition: opacity .12s; }
+  .note:hover .note-ctl, .note.selected .note-ctl, .note-ctl:focus-visible { opacity: 1; }
+  .note-x, .note-edit, .note-link { width: 22px; height: 22px; border-radius: 50%; background: #12294A; color: #fff; font-size: 12px; line-height: 22px; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+  .note-x { top: -10px; right: -10px; font-size: 15px; }
+  .note-edit { top: -10px; right: 16px; }
+  .note-link { top: -10px; left: -10px; font-size: 11px; }
+  .note-x:hover { background: #d7373f; }
+  .note-edit:hover, .note-link:hover { background: #1F63C6; }
+  .note-palette { bottom: -13px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; background: #fff; padding: 4px 6px; border-radius: 999px; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+  .note-palette button { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px #cfd4da; }
+  .note-palette button:hover { transform: scale(1.25); }
+  .note-badge { position: absolute; bottom: 4px; right: 5px; font-size: 10px; opacity: .8; }
+  body.readonly .note { cursor: default; }
+  body.readonly .note-x, body.readonly .note-edit, body.readonly .note-palette, body.readonly .zone-add, body.readonly .edit-only { display: none !important; }
+
+  .extra-edit { outline: none; cursor: text; }
+  .extra-edit:empty::before { content: attr(data-ph); opacity: .55; }
+  .extra-edit:focus { box-shadow: 0 0 0 2px rgba(31,99,198,.45); border-radius: 6px; }
+  .row-label { position: absolute; width: 130px; border-radius: 10px; background: #d5d8dc; color: #4e555e; font: 600 12px/1.3 Inter, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 8px; gap: 4px; white-space: pre-line; }
+  .row-label.dark { background: #5f656d; color: #fff; font-family: Oswald, sans-serif; font-size: 14px; font-weight: 600; }
+  .colhead { position: absolute; text-align: center; font-family: Oswald, sans-serif; font-weight: 600; color: #7f868f; font-size: 15px; letter-spacing: .06em; }
+  .emo-pt { cursor: ns-resize; }
+  body.readonly .emo-pt { cursor: default; }
+
+  /* ---------- Paneles ---------- */
+  .pill { border-radius: 999px; }
+  .tab-btn[aria-selected="true"] { color: #12294A; border-color: #12294A; }
+  .scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scroll-thin::-webkit-scrollbar-thumb { background: #cfd4da; border-radius: 8px; }
+  .toast-enter { animation: toastIn .25s ease; }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } }
+  @media (min-width: 1024px) { body.sidebar-open #bot-fab, body.sidebar-open #bot-panel { right: 400px; } }
+  .bot-msg a { text-decoration: underline; }
+  .typing span { display: inline-block; width: 6px; height: 6px; margin: 0 1px; border-radius: 50%; background: #9aa1a9; animation: blink 1.2s infinite; }
+  .typing span:nth-child(2) { animation-delay: .2s; } .typing span:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 50% { opacity: .25; } }
+</style>
+</head>
+
+<body class="min-h-full">
+
+<!-- =====================================================================
+     1. LANDING / SPLASH
+     ===================================================================== -->
+<section id="landing" class="min-h-screen flex flex-col bg-white">
+  <header class="flex items-center justify-between px-5 sm:px-10 py-5">
+    <a href="#" class="flex items-center gap-3" aria-label="Hesmiter Lab">
+      <!-- Reemplaza logo.png por tu archivo; se mantiene el id="app-logo" -->
+      <img id="app-logo" src="logo.png" alt="Logotipo de Hesmiter Lab" class="h-10 w-auto"
+           onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'h-10 w-10 rounded-xl bg-ink text-white grid place-items-center font-extrabold',textContent:'H'}))">
+      <span class="text-lg font-extrabold tracking-tight text-ink">Hesmiter Lab</span>
+    </a>
+    <button data-start class="hidden sm:inline-flex items-center gap-2 text-sm font-semibold text-ink hover:text-brand">Entrar al lienzo</button>
+  </header>
+
+  <main class="flex-1 flex flex-col items-center px-5 sm:px-10 pt-8 sm:pt-14 pb-12">
+    <h1 class="hero-title text-center font-extrabold text-ink text-[2.4rem] sm:text-6xl lg:text-[4.6rem] max-w-5xl">
+      El lienzo inteligente para una creatividad infinita
+    </h1>
+    <p class="mt-5 text-center text-lg sm:text-xl text-slate-500 max-w-2xl">
+      Ecosistema integral de herramientas de innovación y colaboración en tiempo real.
+    </p>
+    <button data-start class="mt-8 pill bg-ink text-white font-semibold text-base px-8 py-3.5 shadow-lg shadow-ink/20 hover:bg-[#0c1d36] hover:-translate-y-0.5 transition">
+      Comenzar
+    </button>
+
+    <!-- Vista previa del tablero -->
+    <div class="mt-12 sm:mt-16 w-full max-w-5xl">
+      <div class="rounded-2xl border border-slate-200 bg-white shadow-[0_30px_80px_-30px_rgba(18,41,74,.45)] overflow-hidden">
+        <div class="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 bg-paper">
+          <span class="w-2.5 h-2.5 rounded-full bg-[#ec5a6a]"></span><span class="w-2.5 h-2.5 rounded-full bg-amber"></span><span class="w-2.5 h-2.5 rounded-full bg-[#6bb13d]"></span>
+          <span class="ml-3 text-xs font-semibold text-slate-500">Customer Journey Map · Sala «Hotel de negocios»</span>
+          <span class="ml-auto flex -space-x-1.5">
+            <span class="w-6 h-6 rounded-full bg-teal text-white text-[10px] font-bold grid place-items-center ring-2 ring-white">AN</span>
+            <span class="w-6 h-6 rounded-full bg-amber text-white text-[10px] font-bold grid place-items-center ring-2 ring-white">LU</span>
+            <span class="w-6 h-6 rounded-full bg-brand text-white text-[10px] font-bold grid place-items-center ring-2 ring-white">TÚ</span>
+          </span>
+        </div>
+        <div id="hero-board" class="relative dotgrid aspect-[16/9] bg-white"></div>
+      </div>
+      <p class="mt-6 text-center text-sm text-slate-500">Ocho lienzos guiados en dos fases, Mapear y Explorar, para trabajar en equipo y entregar al profesor.</p>
+    </div>
+  </main>
+</section>
+
+<!-- Modal de configuración -->
+<div id="config-modal" class="hidden fixed inset-0 z-50 bg-ink/40 backdrop-blur-sm grid place-items-center p-4" role="dialog" aria-modal="true" aria-labelledby="cfg-title">
+  <form id="config-form" class="w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-7">
+    <div class="flex items-start justify-between">
+      <div>
+        <h2 id="cfg-title" class="text-xl font-extrabold text-ink">Configura tu sala de trabajo</h2>
+        <p class="text-sm text-slate-500 mt-1">Quienes usen el mismo nombre de sala verán el mismo lienzo.</p>
+      </div>
+      <button type="button" data-close-modal class="text-slate-400 hover:text-ink text-2xl leading-none" aria-label="Cerrar">×</button>
+    </div>
+    <div class="mt-5 space-y-4">
+      <label class="block"><span class="text-sm font-semibold">Nombre del usuario / integrante</span>
+        <input id="cfg-user" required class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 focus:border-brand outline-none" placeholder="Juan Pérez"></label>
+      <label class="block"><span class="text-sm font-semibold">Nombre del proyecto / sala de trabajo</span>
+        <input id="cfg-room" required class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 focus:border-brand outline-none" placeholder="Equipo 3 - Parque acuático"></label>
+      <details class="rounded-xl bg-paper px-3 py-2" open>
+        <summary class="text-sm font-semibold cursor-pointer py-1">Conexión con Supabase <span class="font-normal text-slate-500">(opcional)</span></summary>
+        <label class="block mt-2"><span class="text-xs font-semibold text-slate-600">SUPABASE_URL</span>
+          <input id="cfg-url" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono" placeholder="https://tu-proyecto.supabase.co"></label>
+        <label class="block mt-2"><span class="text-xs font-semibold text-slate-600">SUPABASE_ANON_KEY</span>
+          <input id="cfg-key" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono" placeholder="eyJhbGciOi..."></label>
+        <p class="text-xs text-slate-500 mt-2 mb-1">Sin estas llaves el lienzo funciona en modo local y se guarda solo en este navegador.</p>
+      </details>
+    </div>
+    <button class="mt-6 w-full pill bg-ink text-white font-semibold py-3 hover:bg-[#0c1d36] transition">Entrar al Lienzo Colaborativo</button>
+  </form>
+</div>
+
+<!-- =====================================================================
+     2. WORKSPACE
+     ===================================================================== -->
+<section id="workspace" class="hidden min-h-screen flex-col">
+  <!-- Header global -->
+  <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200">
+    <div class="flex items-center gap-3 px-3 sm:px-5 h-16">
+      <img src="logo.png" alt="" class="h-9 w-auto" onerror="this.style.display='none'">
+      <div class="min-w-0">
+        <div class="font-extrabold text-ink leading-tight">Hesmiter Lab</div>
+        <div id="ws-room" class="text-xs text-slate-500 truncate max-w-[40vw] sm:max-w-xs"></div>
+      </div>
+      <div id="sync-status" class="hidden md:flex items-center gap-2 ml-4 text-xs font-medium text-slate-600 bg-paper rounded-full px-3 py-1.5">
+        <span class="sync-dot w-2 h-2 rounded-full bg-slate-400"></span><span class="sync-text">Modo local</span>
+      </div>
+      <div class="ml-auto flex items-center gap-2">
+        <div id="presence" class="hidden sm:flex -space-x-2 mr-1" aria-label="Usuarios en línea"></div>
+        <div id="user-chip" class="hidden lg:flex items-center gap-2 text-sm font-semibold text-ink pr-2"></div>
+        <button id="btn-save" class="edit-only pill bg-ink text-white text-sm font-semibold px-4 py-2 hover:bg-[#0c1d36] transition" title="Guardar Canvas">
+          <span aria-hidden="true">💾</span><span class="hidden sm:inline"> Guardar Canvas</span>
+        </button>
+        <button id="btn-share" class="edit-only pill border-2 border-teal text-teal text-sm font-semibold px-4 py-1.5 hover:bg-teal hover:text-white transition" title="Compartir con Profesor">
+          <span aria-hidden="true">🎓</span><span class="hidden sm:inline"> Compartir con Profesor</span>
+        </button>
+        <button id="btn-sidebar" class="relative w-10 h-10 rounded-full hover:bg-paper grid place-items-center text-lg" title="Chat, blog e hilos del equipo" aria-label="Abrir panel colaborativo">
+          💬<span id="chat-unread" class="hidden absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-[#ec5a6a]"></span>
+        </button>
+        <button id="btn-exit" class="w-10 h-10 rounded-full hover:bg-paper grid place-items-center text-slate-500" title="Cambiar de usuario o de sala" aria-label="Cambiar de usuario o de sala">⇄</button>
+      </div>
+    </div>
+    <!-- Estado en móvil -->
+    <div id="sync-status-m" class="md:hidden flex items-center gap-2 px-4 pb-2 text-xs text-slate-600">
+      <span class="sync-dot w-2 h-2 rounded-full bg-slate-400"></span><span class="sync-text">Modo local</span>
+    </div>
+  </header>
+
+  <!-- Itinerario + fases + menú de herramientas -->
+  <nav class="bg-white border-b border-slate-200 px-3 sm:px-5 py-4">
+    <div class="flex flex-col lg:flex-row lg:items-center gap-4">
+      <div class="flex items-center gap-3 rounded-2xl bg-paper px-4 py-3 lg:w-72 shrink-0">
+        <div class="w-11 h-11 rounded-xl bg-white grid place-items-center shadow-sm" aria-hidden="true">
+          <svg width="30" height="30" viewBox="0 0 32 32" fill="none">
+            <circle cx="12" cy="9" r="4.2" fill="#12294A"/>
+            <path d="M4.5 27c0-5 3.4-9 7.5-9s7.5 4 7.5 9" fill="#12294A"/>
+            <path d="M23.5 13.8c-1.9-2.4-5.6-1-5 2 .5 2.3 5 5.2 5 5.2s4.5-2.9 5-5.2c.6-3-3.1-4.4-5-2z" fill="#ec5a6a"/>
+          </svg>
+        </div>
+        <div>
+          <div class="text-xs text-slate-500">Itinerario</div>
+          <div class="font-bold text-ink">Experiencia de Cliente</div>
+        </div>
+      </div>
+      <div class="flex-1">
+        <div id="phase-tabs" class="inline-flex rounded-full bg-paper p-1" role="tablist" aria-label="Fases"></div>
+        <div id="tool-menu" class="mt-3 flex flex-wrap gap-x-6 gap-y-3"></div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Lienzo -->
+  <main class="flex-1 px-3 sm:px-5 py-5">
+    <div id="lock-banner" class="hidden mb-3"></div>
+    <div id="canvas-card" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"></div>
+  </main>
+</section>
+
+<!-- Panel lateral colaborativo -->
+<aside id="sidebar" class="fixed top-0 right-0 h-full w-full sm:w-[380px] bg-white border-l border-slate-200 z-40 translate-x-full transition-transform duration-200 flex flex-col shadow-2xl" aria-label="Panel colaborativo">
+  <div class="flex items-center justify-between px-4 h-14 border-b border-slate-200">
+    <div class="font-bold text-ink">Equipo</div>
+    <button id="sb-close" class="w-9 h-9 rounded-full hover:bg-paper text-xl" aria-label="Cerrar panel">×</button>
+  </div>
+  <div class="flex border-b border-slate-200 text-sm font-semibold text-slate-500" role="tablist">
+    <button class="tab-btn flex-1 py-3 border-b-2 border-transparent" data-tab="chat" aria-selected="true">Chat</button>
+    <button class="tab-btn flex-1 py-3 border-b-2 border-transparent" data-tab="blog" aria-selected="false">Blog del proyecto</button>
+    <button class="tab-btn flex-1 py-3 border-b-2 border-transparent" data-tab="hilos" aria-selected="false">Hilos y archivos</button>
+  </div>
+  <!-- Chat -->
+  <div id="pane-chat" class="tab-pane flex-1 flex flex-col min-h-0">
+    <div id="chat-list" class="flex-1 overflow-y-auto scroll-thin p-4 space-y-3"></div>
+    <form id="chat-form" class="p-3 border-t border-slate-200 flex gap-2">
+      <input id="chat-input" class="flex-1 rounded-full border border-slate-200 px-4 py-2 text-sm outline-none focus:border-brand" placeholder="Escribe al equipo…" autocomplete="off">
+      <button class="pill bg-ink text-white text-sm font-semibold px-4">Enviar</button>
+    </form>
+  </div>
+  <!-- Blog -->
+  <div id="pane-blog" class="tab-pane hidden flex-1 flex flex-col min-h-0">
+    <form id="blog-form" class="p-4 border-b border-slate-200 space-y-2">
+      <input id="blog-title" required class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand" placeholder="Título de la entrada">
+      <textarea id="blog-body" required rows="3" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand" placeholder="Acuerdos, aprendizajes, pendientes…"></textarea>
+      <button class="pill bg-ink text-white text-sm font-semibold px-4 py-1.5">Publicar entrada</button>
+    </form>
+    <div id="blog-list" class="flex-1 overflow-y-auto scroll-thin p-4 space-y-3"></div>
+  </div>
+  <!-- Hilos -->
+  <div id="pane-hilos" class="tab-pane hidden flex-1 overflow-y-auto scroll-thin p-4 space-y-5"></div>
+</aside>
+
+<!-- Panel de guía metodológica -->
+<div id="guide-overlay" class="hidden fixed inset-0 z-50 bg-ink/30" data-close-guide></div>
+<aside id="guide-panel" class="fixed top-0 right-0 h-full w-full sm:w-[440px] bg-white z-50 translate-x-full transition-transform duration-200 flex flex-col shadow-2xl" aria-label="Guía de la herramienta">
+  <div class="flex items-center justify-between px-5 h-14 border-b border-slate-200">
+    <div class="font-bold text-ink">📖 Guía de la Herramienta</div>
+    <button data-close-guide class="w-9 h-9 rounded-full hover:bg-paper text-xl" aria-label="Cerrar guía">×</button>
+  </div>
+  <div id="guide-body" class="flex-1 overflow-y-auto scroll-thin p-5"></div>
+</aside>
+
+<!-- Modal genérico -->
+<div id="modal" class="hidden fixed inset-0 z-[60] bg-ink/40 backdrop-blur-sm grid place-items-center p-4" role="dialog" aria-modal="true">
+  <div id="modal-box" class="w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6"></div>
+</div>
+
+<!-- Chatbot Hesmiter AI -->
+<button id="bot-fab" class="hidden fixed bottom-5 right-5 z-40 w-14 h-14 rounded-full bg-ink text-white text-2xl shadow-xl shadow-ink/30 hover:scale-105 transition grid place-items-center" aria-label="Abrir Hesmiter AI">✨</button>
+<div id="bot-panel" class="hidden fixed bottom-24 right-5 z-40 w-[370px] max-w-[calc(100vw-2rem)] h-[560px] max-h-[72vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex-col overflow-hidden">
+  <div class="flex items-center gap-3 px-4 py-3 bg-ink text-white">
+    <div class="w-9 h-9 rounded-full bg-white grid place-items-center overflow-hidden"><img src="logo.png" alt="" class="w-7 h-7 object-contain" onerror="this.replaceWith('✨')"></div>
+    <div class="min-w-0 flex-1">
+      <div class="font-bold text-sm">Hesmiter AI - Tutor de Innovación</div>
+      <div id="bot-context" class="text-[11px] text-white/70 truncate"></div>
+    </div>
+    <button id="bot-settings-btn" class="w-8 h-8 rounded-full hover:bg-white/10" title="Conectar un modelo de IA" aria-label="Configurar IA">⚙</button>
+    <button id="bot-close" class="w-8 h-8 rounded-full hover:bg-white/10 text-lg" aria-label="Cerrar asistente">×</button>
+  </div>
+  <form id="bot-settings" class="hidden p-4 border-b border-slate-200 bg-paper text-sm space-y-2">
+    <p class="text-xs text-slate-600">Sin API key, el tutor responde con su base de conocimiento metodológica. Con una key, usa el modelo elegido con el contexto de tu lienzo.</p>
+    <select id="ai-provider" class="w-full rounded-lg border border-slate-200 px-2 py-1.5">
+      <option value="local">Base de conocimiento (sin API)</option>
+      <option value="gemini">Google Gemini</option>
+      <option value="openai">OpenAI</option>
+    </select>
+    <input id="ai-key" type="password" class="w-full rounded-lg border border-slate-200 px-2 py-1.5 font-mono text-xs" placeholder="API key">
+    <input id="ai-model" class="w-full rounded-lg border border-slate-200 px-2 py-1.5 font-mono text-xs" placeholder="Modelo (opcional)">
+    <p class="text-[11px] text-slate-500">La key se guarda en este navegador. Para producción, llama al modelo desde un backend (p. ej. una Supabase Edge Function).</p>
+    <button class="pill bg-ink text-white text-xs font-semibold px-4 py-1.5">Guardar ajustes</button>
+  </form>
+  <div id="bot-list" class="flex-1 overflow-y-auto scroll-thin p-4 space-y-3 bg-paper/60"></div>
+  <div id="bot-chips" class="px-3 pt-2 flex flex-wrap gap-1.5"></div>
+  <form id="bot-form" class="p-3 flex gap-2">
+    <input id="bot-input" class="flex-1 rounded-full border border-slate-200 px-4 py-2 text-sm outline-none focus:border-brand" placeholder="Pregunta sobre esta herramienta…" autocomplete="off">
+    <button class="w-10 h-10 rounded-full bg-ink text-white grid place-items-center" aria-label="Enviar">➤</button>
+  </form>
+</div>
+
+<div id="toasts" class="fixed bottom-5 left-5 z-[70] space-y-2"></div>
+
+<script>
+/* =========================================================================
+   HERMITER LAB · SPA de herramientas de innovación
+   HTML + Tailwind (CDN) + JavaScript Vanilla + Supabase (opcional)
+   ========================================================================= */
+
+/* -------------------------------------------------------------------------
+   🔑 CONFIGURACIÓN DE SUPABASE
+   Coloca aquí tus llaves (Supabase → Project Settings → API) para que el
+   modal de configuración aparezca prellenado. También pueden escribirse
+   directamente en el modal; se guardan en localStorage.
+
+   Ejecuta este SQL una vez en el editor SQL de Supabase:
+
+     create table if not exists public.canvases (
+       room        text primary key,
+       data        jsonb not null,
+       status      text default 'borrador',
+       share_token text,
+       updated_by  text,
+       updated_at  timestamptz default now()
+     );
+     alter table public.canvases enable row level security;
+     -- Política abierta de demostración (ajústala a tu modelo de usuarios):
+     create policy "acceso sala" on public.canvases for all
+       using (true) with check (true);
+
+   Opcional (archivos adjuntos en la nube): crea un bucket público llamado
+   "hermiter-files" en Storage. Si no existe, los archivos pequeños se
+   guardan embebidos en el propio canvas.
+
+   El tiempo real (usuarios en línea, post-its, chat) usa canales de
+   Supabase Realtime (broadcast + presence) y no requiere tablas extra.
+   ------------------------------------------------------------------------- */
+const SUPABASE_URL      = '';   // ej: 'https://abcd1234.supabase.co'
+const SUPABASE_ANON_KEY = '';   // ej: 'eyJhbGciOiJIUzI1NiIsInR5cCI6...'
+
+/* -------------------------------------------------------------------------
+   🤖 CONFIGURACIÓN DEL CHATBOT (opcional)
+   provider: 'local' (base de conocimiento), 'gemini' u 'openai'.
+   Verifica en la documentación del proveedor el nombre de modelo vigente.
+   Aviso: una API key en el navegador es visible para cualquiera que abra
+   el código; para producción usa un backend intermediario.
+   ------------------------------------------------------------------------- */
+const AI_CONFIG = {
+  provider: 'local',
+  apiKey:   '',
+  model:    '',               // ej: 'gemini-2.0-flash' o 'gpt-4o-mini'
+  defaultModels: { gemini: 'gemini-2.0-flash', openai: 'gpt-4o-mini' }
+};
+
+/* ============================ Utilidades ============================ */
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const uid = () => Math.random().toString(36).slice(2, 10);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const norm = s => String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+const initials = name => String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+const AVATAR_COLORS = ['#1F8F8C', '#1F63C6', '#F5A524', '#ec5a6a', '#6bb13d', '#7c5cc4', '#12294A'];
+const colorFor = name => { let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return AVATAR_COLORS[h % AVATAR_COLORS.length]; };
+const fmtTime = ts => new Date(ts).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+const LS_CONFIG = 'hermiter_config';
+const LS_AI     = 'hermiter_ai';
+const LS_UID    = 'hermiter_uid';
+const W = 1200, H = 760, NOTE_W = 118, NOTE_H = 92;
+
+const COLORS = {
+  rosa:     { bg: '#e85466', fg: '#ffffff', label: 'Rosa' },
+  naranja:  { bg: '#f7931e', fg: '#ffffff', label: 'Naranja' },
+  verde:    { bg: '#6bb13d', fg: '#ffffff', label: 'Verde' },
+  amarillo: { bg: '#f7c948', fg: '#1f2937', label: 'Amarillo' },
+  azul:     { bg: '#1ea5c9', fg: '#ffffff', label: 'Azul' }
+};
+
+const STK_TYPES = {
+  players:  { label: 'Players',      color: 'rosa',    desc: 'Usuarios activos en la comunidad', ring: [185, 112] },
+  partners: { label: 'Partners',     color: 'naranja', desc: 'Implicación de segundo grado pero clave', ring: [330, 205] },
+  support:  { label: 'Support/Tech', color: 'azul',    desc: 'Proveedores o perfiles investigativos', ring: [330, 205] },
+  viewers:  { label: 'Viewers',      color: 'verde',   desc: 'Interesados no implicados', ring: [485, 300] }
+};
+
+const N = (text, color, x, y) => ({ text, color, x, y });
+
+/* ===================== Definición de herramientas =====================
+   Cada herramienta declara sus zonas (en coordenadas de un tablero de
+   1200×760), su decoración, un ejemplo precargable, su guía y la base de
+   conocimiento que usa el chatbot. */
+const TOOLS = {
+  /* ------------------------------ MAPEAR ------------------------------ */
+  analogos: {
+    name: 'Análogos – Antílogos', phase: 'mapear', group: 'COMPAÑÍA',
+    sheetTitle: 'ANÁLOGOS-ANTÍLOGOS.', sheetSub: 'MAPEAR/EMPRESA',
+    zones: [
+      { id: 'ser', x: 20, y: 20, w: 565, h: 720, shape: 'none', titlePos: 'bottom', title: '...SER COMO?',
+        sub: 'Análogos: individuos, productos o empresas que creemos ser o nos gustaría ser.',
+        hint: 'Anota referentes de cualquier sector a los que te gustaría parecerte y, entre paréntesis, el rasgo concreto que admiras.' },
+      { id: 'noser', x: 615, y: 20, w: 565, h: 720, shape: 'none', titlePos: 'bottom', align: 'right', title: '...NO SER COMO?',
+        sub: 'Antílogos: individuos, productos o empresas que NO creemos ser ni queremos parecernos.',
+        hint: 'Anota lo que tu empresa no quiere ser y el motivo. Los antílogos ayudan a definir límites de la propuesta de valor.' }
+    ],
+    decor: t => `
+      <svg class="absolute inset-0" width="${W}" height="${H}" aria-hidden="true">
+        <path d="M400 0 A200 200 0 0 0 800 0" fill="none" stroke="#c9ced5" stroke-width="1.5" stroke-dasharray="3 4"/>
+        <line x1="600" y1="200" x2="600" y2="745" stroke="#c9ced5" stroke-width="1.5" stroke-dasharray="3 4"/>
+      </svg>
+      <div class="absolute text-center" style="left:420px;top:26px;width:360px">
+        <div class="sheet-title" style="font-size:34px;color:#6d747d">¿TE GUSTARÍA...? <span class="tip pe" tabindex="0">i<span class="tip-box">Escribe en la tarjeta azul quién es la empresa hoy. Es el punto de partida para comparar.</span></span></div>
+      </div>
+      <div class="pe extra-edit absolute grid place-items-center text-center font-bold text-[12px] p-2 shadow"
+           style="left:535px;top:95px;width:130px;min-height:80px;background:${COLORS.azul.bg};color:#fff;border-radius:2px"
+           data-extra="base" data-ph="Entidad base: ¿quién eres hoy?">${esc(t.extra.base || '')}</div>`,
+    example: {
+      extra: { base: 'Soy una empresa de telefonía' },
+      notes: [
+        N('Nike (en la personalización de producto).', 'verde', 110, 150),
+        N('Tienda Ultramarinos (ser una tienda de toda la vida en el barrio).', 'verde', 300, 230),
+        N('Tú MADRE (en la atención y los cuidados).', 'rosa', 150, 360),
+        N('FAST FOOD (Muy estándar y poca calidad).', 'rosa', 880, 170),
+        N('SPAM. Molestar y aparecer sin que me llamen.', 'amarillo', 690, 330),
+        N('Parque de Atracciones (Muchas colas para disfrutar de cualquier cosa).', 'rosa', 870, 450)
+      ]
+    },
+    guide: {
+      objetivo: 'Definir la identidad deseada de la empresa comparándola con referentes: a quién queremos parecernos (análogos), a quién no (antílogos) y en qué rasgo concreto.',
+      pasos: [
+        'Escriban en la tarjeta superior quién es la empresa hoy (ej. «Soy una empresa de telefonía»).',
+        'En silencio, cada integrante propone de 3 a 5 referentes de cualquier sector a los que le gustaría parecerse.',
+        'Añadan entre paréntesis el rasgo concreto que admiran (ej. Nike, en la personalización).',
+        'Repitan con los antílogos: lo que no quieren ser y por qué.',
+        'Agrupen notas parecidas y conversen qué atributos se repiten: son pistas de la propuesta de valor.'
+      ],
+      caso: 'Una empresa de telefonía quiere personalizar como Nike, ser cercana como la tienda de ultramarinos del barrio y cuidar como una madre. No quiere ser estándar como la comida rápida, invasiva como el spam ni hacer esperar como un parque de atracciones.'
+    },
+    kb: {
+      que: 'Aquí comparas tu empresa con referentes externos. A la izquierda van los <b>análogos</b> (a quién te gustaría parecerte) y a la derecha los <b>antílogos</b> (a quién no). Escribe siempre el rasgo concreto entre paréntesis.',
+      ejemplo: { text: 'Netflix (en recomendar justo lo que necesito).', color: 'verde', zone: 'ser' },
+      chip: '¿Diferencia entre análogo y antílogo?'
+    },
+    welcome: '¡Hola! Soy tu asistente de Hesmiter. Te ayudo a elegir referentes: a quién quiere parecerse tu empresa y a quién no. ¿Empezamos por la entidad base?'
+  },
+
+  stakeholders: {
+    name: 'Stakeholders Map', phase: 'mapear', group: 'CLIENTE / MERCADO',
+    sheetTitle: 'STAKEHOLDERS MAPS.', sheetSub: 'MAPEAR/CLIENTE',
+    zones: [],
+    decor: t => {
+      const rings = [[250, 150], [400, 245], [560, 340], [760, 450]];
+      return `
+      <svg class="absolute inset-0" width="${W}" height="${H}" aria-hidden="true">
+        ${rings.map(([rx, ry]) => `<ellipse cx="600" cy="380" rx="${rx}" ry="${ry}" fill="none" stroke="#c9ced5" stroke-width="1.5" stroke-dasharray="3 4"/>`).join('')}
+        <ellipse cx="600" cy="380" rx="105" ry="62" fill="#d5d8dc"/>
+      </svg>
+      <div class="pe extra-edit absolute sheet-title text-center grid place-items-center" style="left:505px;top:335px;width:190px;height:90px;font-size:20px;color:#5f656d;line-height:1.05"
+           data-extra="actor" data-ph="ACTOR PRINCIPAL">${esc(t.extra.actor || 'ACTOR PRINCIPAL')}</div>`;
+    },
+    example: {
+      extra: {
+        actor: 'ACTOR PRINCIPAL', view: 'map',
+        list: [
+          ['Consultores', 'viewers', 0], ['Clusters / asociaciones', 'partners', 1], ['Media', 'viewers', 2], ['Políticos', 'partners', 3],
+          ['Proveedores tecnológicos', 'support', 4], ['Dairy processing', 'support', 5], ['Investigadores Sector Alimenticio', 'support', 6],
+          ['Universidad', 'players', 7], ['Centros de Investigación', 'players', 8], ['OPEN COMUNITIES', 'partners', 9], ['Food Producers', 'support', 10]
+        ]
+      },
+      notes: [
+        N('Consultores', 'verde', 430, 70), N('Clusters / asociaciones', 'amarillo', 640, 200), N('Media', 'verde', 200, 300),
+        N('Políticos', 'amarillo', 360, 300), N('Proveedores tecnológicos', 'azul', 575, 430), N('Dairy processing', 'azul', 395, 480),
+        N('Investigadores Sector Alimenticio', 'azul', 735, 470), N('Universidad', 'rosa', 845, 340), N('Centros de Investigación', 'rosa', 890, 460),
+        N('OPEN COMUNITIES', 'amarillo', 545, 620), N('Food Producers', 'azul', 890, 615)
+      ]
+    },
+    guide: {
+      objetivo: 'Identificar a todos los actores que influyen en el proyecto y visualizar su cercanía e implicación respecto al actor principal.',
+      pasos: [
+        'Definan quién es el actor principal (la organización, el servicio o el usuario central).',
+        'En la lista previa, anoten sin filtrar a todas las personas, colectivos y organizaciones que influyen.',
+        'Clasifiquen cada uno como Player, Partner, Viewer o Support/Tech.',
+        'Pulsen «Ir a mapear» y muevan cada tarjeta al anillo que refleje su cercanía real con el núcleo.',
+        'Busquen huecos: ¿falta algún actor? ¿quién está demasiado lejos y debería acercarse?'
+      ],
+      caso: 'Una plataforma de «open communities» del sector alimentario: universidades y centros de investigación actúan como players; clusters, políticos y la propia comunidad como partners; medios y consultores como viewers; y proveedores tecnológicos, productores e investigadores como soporte.'
+    },
+    kb: {
+      que: 'Aquí identificas a <b>todos los actores</b> que influyen en tu proyecto. Primero los listas, luego los clasificas en Players, Partners, Viewers y Support/Tech, y finalmente los colocas en los anillos: cuanto más cerca del centro, mayor implicación con el actor principal.',
+      ejemplo: { text: 'Asociación de padres de familia', color: 'naranja' },
+      chip: '¿Cómo diferencio un Player de un Partner?'
+    },
+    welcome: '¡Hola! Soy tu asistente de Hesmiter. Te ayudo a identificar y clasificar a tus Players, Partners y Viewers. ¿Tienes dudas sobre dónde ubicar a un actor?'
+  },
+
+  persona: {
+    name: 'Persona', phase: 'mapear', group: 'CLIENTE / MERCADO',
+    sheetTitle: 'PERSONA.', sheetSub: 'MAPEAR/CLIENTE',
+    zones: [
+      { id: 'demo', x: 20, y: 20, w: 565, h: 345, title: 'CARACTERÍSTICAS DEMOGRÁFICAS / COMUNIDAD',
+        sub: '¿Cuál es su edad? ¿Cómo es su familia? ¿Cuál es su trabajo?\n¿Nivel cultural? ¿Con quién tiene más confianza?',
+        hint: 'Datos que describen a la persona: edad, familia, trabajo, nivel cultural y en quién se apoya.' },
+      { id: 'nec', x: 615, y: 20, w: 565, h: 345, align: 'right', title: 'NECESIDADES / MOTIVACIONES',
+        sub: '¿Cuáles son sus necesidades y motivaciones en el momento descrito?',
+        hint: 'Qué demanda el usuario en ese escenario. Usa frases en primera persona entre comillas cuando las tengas.' },
+      { id: 'momento', x: 20, y: 395, w: 565, h: 345, titlePos: 'bottom', title: 'MOMENTO / ESCENARIO',
+        sub: '¿Cuál es el momento o escenario en el que lo situamos?',
+        hint: 'El entorno y las circunstancias concretas donde ocurre la acción.' },
+      { id: 'metas', x: 615, y: 395, w: 565, h: 345, titlePos: 'bottom', align: 'right', title: 'OBJETIVOS Y METAS',
+        sub: '¿Qué fin último le mueve a actuar?',
+        hint: 'El propósito de fondo: lo que quiere lograr o demostrar, más allá de la tarea.' }
+    ],
+    decor: t => `
+      <svg class="absolute inset-0" width="${W}" height="${H}" aria-hidden="true">
+        <ellipse cx="600" cy="380" rx="175" ry="135" fill="#fff" stroke="#c9ced5" stroke-width="1.5" stroke-dasharray="3 4"/>
+      </svg>
+      <div class="absolute text-center" style="left:445px;top:268px;width:310px">
+        <div class="sheet-title" style="font-size:16px;color:#9aa1a9">PERSONA <span class="tip pe" tabindex="0">i<span class="tip-box">Pon nombre al arquetipo y una descripción corta que lo resuma (ej. «Raúl, el aprendiz de chef»).</span></span></div>
+        <div class="pe extra-edit sheet-title mt-1" style="font-size:40px;color:#e85466;line-height:1" data-extra="name" data-ph="Nombre">${esc(t.extra.name || '')}</div>
+        <div class="pe extra-edit mt-1 text-[13px] font-semibold text-slate-500" data-extra="desc" data-ph="¿Nuestro usuario es el típico...?">${esc(t.extra.desc || '')}</div>
+      </div>`,
+    example: {
+      extra: { name: 'RAÚL,', desc: 'el aprendiz de chef.' },
+      notes: [
+        N('Edad: 35 años', 'amarillo', 45, 130), N('· Profesión: funcionario\n· Nivel de ingresos: medio/bajo', 'rosa', 190, 130),
+        N('Emparejado desde hace 7 años con Luisa, 32 años, profesora de Escuela', 'verde', 335, 110),
+        N('· No perder mucho tiempo en elaboraciones.\n· Ahorrar tiempo.', 'amarillo', 660, 95),
+        N('"Necesito algo que sea fácil de cocinar y parezca muy elaborado."', 'amarillo', 1030, 95),
+        N('Aprender algo nuevo en la cocina.', 'verde', 830, 175), N('Platos complejos, pero de mala ejecución técnica.', 'verde', 1030, 245),
+        N('Cocina de casa', 'amarillo', 90, 470), N('· Cenas de parejas de amigos\n· Batalla de egos por quién es el más sibarita', 'azul', 250, 460),
+        N('Sorprender a sus comensales.', 'amarillo', 800, 430), N('Probar platos nuevos', 'amarillo', 650, 560),
+        N('Demostrar que se puede desenvolver solo en la cocina.', 'rosa', 830, 545),
+        N('"Me gusta conocer en la cocina cosas nuevas para enseñárselo a mi pareja. Es nuestro hobby compartido"', 'azul', 1030, 500)
+      ]
+    },
+    guide: {
+      objetivo: 'Construir un arquetipo de usuario basado en la investigación para que todo el equipo diseñe pensando en alguien concreto y no en «todo el mundo».',
+      pasos: [
+        'Revisen lo aprendido en entrevistas y observación: busquen patrones de comportamiento, no datos aislados.',
+        'Pongan nombre y una descripción corta al arquetipo en el círculo central.',
+        'Completen los datos demográficos y de comunidad (arriba izquierda).',
+        'Describan el momento o escenario concreto donde lo situamos (abajo izquierda).',
+        'Añadan necesidades y motivaciones en ese escenario, con citas reales si las tienen.',
+        'Cierren con los objetivos y metas de fondo, y validen que el arquetipo «se siente real».'
+      ],
+      caso: 'Raúl, el aprendiz de chef: 35 años, funcionario, emparejado con Luisa. Cocina en casa para cenas con amigos en las que compiten por ser el más sibarita; necesita recetas fáciles que parezcan elaboradas y quiere demostrar que se desenvuelve solo en la cocina.'
+    },
+    kb: {
+      que: 'Aquí construyes un <b>arquetipo</b> de usuario. En el centro va su nombre y una descripción corta; alrededor, sus datos demográficos, su escenario, sus necesidades y sus metas. Basa cada nota en lo que observaste o escuchaste.',
+      ejemplo: { text: '"Quiero cocinar algo que impresione sin pasar toda la tarde en la cocina"', color: 'amarillo', zone: 'nec' },
+      chip: '¿Cómo defino un buen arquetipo?'
+    },
+    welcome: '¡Hola! Soy tu asistente de Hesmiter. Vamos a dar vida a tu arquetipo de usuario. ¿Ya tienes un nombre y un escenario para tu Persona?'
+  },
+
+  journey: {
+    name: 'Customer Journey Map', phase: 'mapear', group: 'CLIENTE / MERCADO',
+    sheetTitle: 'CUSTOMER JOURNEY MAP.', sheetSub: 'MAPEAR/CLIENTE',
+    zones: (() => {
+      const cols = [['antes', 160, 340], ['durante', 510, 340], ['despues', 860, 320]];
+      const rows = [['acc', 50, 120], ['con', 180, 100], ['sie', 290, 225]];
+      const z = [];
+      rows.forEach(([r, y, h]) => cols.forEach(([c, x, w]) => z.push({ id: `${r}-${c}`, x, y, w, h })));
+      return z;
+    })(),
+    decor: t => {
+      const rows = [
+        ['ACCIONES DEL USUARIO', 50, 120, true, 'Pasos cronológicos que realiza el usuario, en tarjetas de colores y numerados.'],
+        ['Puntos\nde contacto', 180, 100, false, 'Canales o soportes donde ocurre cada acción: móvil, recepción, e-mail, panfletos…'],
+        ['¿Qué está pasando?\n\n¿Qué está sintiendo?', 290, 225, false, 'Frases textuales y pensamientos del usuario, entre comillas.']
+      ];
+      return `
+      ${[['ANTES', 160, 340], ['DURANTE', 510, 340], ['DESPUÉS', 860, 320]].map(([l, x, w]) => `<div class="colhead" style="left:${x}px;top:16px;width:${w}px">${l}</div>`).join('')}
+      ${rows.map(([l, y, h, dark, hint]) => `<div class="row-label ${dark ? 'dark' : ''}" style="left:20px;top:${y}px;height:${h}px">${esc(l)}<span class="tip pe" tabindex="0">i<span class="tip-box">${esc(hint)}</span></span></div>`).join('')}
+      <div class="row-label" style="left:20px;top:525px;height:220px;justify-content:space-between;padding:22px 0;font-size:30px">
+        <span aria-label="Experiencia positiva">😊</span>
+        <span class="tip pe" tabindex="0" style="font-size:10px">i<span class="tip-box">Curva emocional: arrastra cada punto hacia arriba (satisfacción) o hacia abajo (frustración). Añade o renombra puntos en el panel superior.</span></span>
+        <span aria-label="Experiencia negativa">☹️</span>
+      </div>
+      <div class="absolute rounded-xl border-[1.5px] border-dashed border-[#c9ced5]" style="left:160px;top:525px;width:1020px;height:220px"></div>
+      <svg id="emo-svg" class="absolute inset-0" width="${W}" height="${H}">${emotionSVG(t)}</svg>`;
+    },
+    example: {
+      extra: {
+        points: [['Reserva', 85], ['Llegada', 85], ['Check-in', 85], ['Detalles', 15], ['Habitación', 15], ['Cena', 55], ['Reserva extra', 8], ['Salida', 68]]
+      },
+      notes: (() => {
+        const acc = [['1) Reserva de la habitación', 'verde'], ['2) Llego al hotel', 'amarillo'], ['3) Check-in de la reserva', 'rosa'], ['4) Detalles del hotel', 'verde'], ['5) Llego a mi habitación', 'amarillo'], ['6) Cenar en habitación', 'azul'], ['7) Reserva de última hora de un extra', 'rosa'], ['8) Salida del hotel', 'verde']];
+        const con = [['E-mail', 'verde'], ['Móvil\nRecepción', 'amarillo'], ['Recepción', 'rosa'], ['Recepción', 'verde'], ['Panfleto hotel', 'amarillo'], ['Panfleto hotel', 'azul'], ['Teléfono\nRecepción', 'rosa'], ['Recepción', 'verde']];
+        const sie = [['"Mi reserva está íntegramente gestionada por mi empresa"', 'verde'], ['"Saco mi móvil y busco mi número de reserva"', 'amarillo'], ['"Si es la primera vez, tienen que registrar mis datos y escanear mis documentos"', 'rosa'], ['"Pregunto si hay habitación para fumadores, pero nada, está todo lleno"', 'verde'], ['"Vaya, el hotel tiene gym, si lo hubiera sabido me traigo mis tenis"', 'amarillo'], ['"Voy a cenar, ¿esto entrará en mis dietas?"', 'azul'], ['"No me acordaba de reservar sala de reunión. ¿Tienen salas disponibles? Lo sentimos, mañana está completo"', 'rosa'], ['"¿Puede hacerme la factura un poco rápido? Me esperan en el bar de al lado"', 'verde']];
+        const out = [];
+        acc.forEach(([t, c], i) => out.push(N(t, c, 166 + i * 127, 64)));
+        con.forEach(([t, c], i) => out.push(N(t, c, 166 + i * 127, 184)));
+        sie.forEach(([t, c], i) => out.push(N(t, c, 166 + i * 127, 300)));
+        return out;
+      })()
+    },
+    guide: {
+      objetivo: 'Visualizar paso a paso la experiencia del cliente antes, durante y después del servicio para detectar momentos de dolor y oportunidades de mejora.',
+      pasos: [
+        'Acoten el viaje: ¿dónde empieza y dónde termina la experiencia que vamos a analizar?',
+        'Escriban las acciones del usuario en orden cronológico, repartidas en Antes, Durante y Después.',
+        'Debajo de cada acción, anoten el punto de contacto (canal o soporte) donde ocurre.',
+        'Añadan lo que el usuario piensa o dice en cada paso, idealmente con frases textuales.',
+        'Creen un punto emocional por acción y ajusten su altura según la satisfacción.',
+        'Observen la curva: los valles son las mejores oportunidades de diseño.'
+      ],
+      caso: 'La estancia en un hotel de negocios: la reserva por e-mail y la llegada son fluidas; la experiencia cae al no haber habitación de fumadores y al descubrir tarde servicios como el gimnasio, y toca fondo al no poder reservar una sala de reuniones de última hora.'
+    },
+    kb: {
+      que: 'Aquí recorres la experiencia del cliente en tres fases (<b>Antes, Durante y Después</b>). En cada columna anotas acciones, puntos de contacto y lo que el usuario piensa o siente; abajo trazas la <b>curva emocional</b> para ver dónde cae la experiencia.',
+      ejemplo: { text: '"¿Por qué tengo que volver a dar mis datos si ya reservé?"', color: 'rosa', zone: 'sie-antes' },
+      chip: '¿Cómo trazo la curva emocional?'
+    },
+    welcome: '¡Hola! Soy tu asistente de Hesmiter. Te acompaño a recorrer el viaje de tu cliente paso a paso y a trazar su curva emocional. ¿Qué experiencia vamos a mapear?'
+  },
+
+  /* ------------------------------ EXPLORAR ------------------------------ */
+  entrevista: {
+    name: 'Entrevista Cualitativa', phase: 'explorar', group: 'INVESTIGACIÓN',
+    sheetTitle: 'ENTREVISTA CUALITATIVA.', sheetSub: 'EXPLORAR/INVESTIGACIÓN',
+    zones: [
+      { id: 'entrevista', x: 20, y: 20, w: 360, h: 470, title: 'ENTREVISTA',
+        sub: '1) Objetivos y límites del proyecto.\n2) Descripción del tema a tratar.\n3) Preguntas a realizar.',
+        hint: 'Prepara la entrevista: qué quieres aprender, de qué tema hablarás y el guion de preguntas abiertas.' },
+      { id: 'usuario', x: 20, y: 505, w: 360, h: 235, title: 'USUARIO/CLIENTE',
+        sub: '1) Nombre/edad/profesión.\n2) Nivel cultural.\n3) ¿Cuál es su relación con el tema a tratar?',
+        hint: 'Perfil de la persona entrevistada y su vínculo con el tema.' },
+      { id: 'obs1', x: 400, y: 60, w: 385, h: 325, q: true, title: '¿Qué has descubierto que no supieras?', hint: 'Hallazgos nuevos: datos, comportamientos o motivos que no conocías antes de la entrevista.' },
+      { id: 'obs2', x: 795, y: 60, w: 385, h: 325, q: true, title: '¿Qué crees que te faltó por descubrir?', hint: 'Temas que quedaron abiertos o que no supiste preguntar.' },
+      { id: 'obs3', x: 400, y: 400, w: 385, h: 340, q: true, title: '¿Qué te ha impactado?', hint: 'Frases, gestos o contradicciones que te sorprendieron.' },
+      { id: 'obs4', x: 795, y: 400, w: 385, h: 340, q: true, title: 'Después de la entrevista, ¿dónde te gustaría profundizar? ¿Qué dudas te han quedado?', hint: 'Preguntas para la siguiente ronda de investigación.' }
+    ],
+    decor: t => `
+      <div class="absolute sheet-title text-center" style="left:400px;top:18px;width:780px;font-size:26px;color:#6d747d">OBSERVACIONES</div>
+      <textarea class="pe absolute rounded-lg border border-slate-200 bg-paper/70 p-2 text-[12px] leading-snug text-slate-600 resize-none outline-none focus:border-brand"
+        style="left:36px;top:300px;width:328px;height:176px" data-extra-input="guion"
+        placeholder="Guion de preguntas: escribe aquí las preguntas abiertas que harás…">${esc(t.extra.guion || '')}</textarea>`,
+    example: {
+      extra: { guion: '¿Qué es para ti la cultura del vino?\n¿Cuándo lo sueles consumir? ¿Por qué esos momentos?\n¿Por qué vino y no otra bebida?\n¿Te asesora alguien en la compra? ¿Por qué?\n¿Qué es lo que más te llama la atención, aparte del precio?\n¿Cuándo fue la última ocasión que compraste? ¿Por qué motivo?\n¿Tu botella perfecta sería…? ¿En qué situación?' },
+      notes: [
+        N('Entender los motivos por los que compra vino un joven.', 'amarillo', 36, 150), N('Experiencia de compra en el sector del vino.', 'amarillo', 150, 128),
+        N('Situaciones que se producen alrededor del ritual del vino.', 'rosa', 262, 100),
+        N('Ramón. 30 años. Comercial. Seguros.', 'amarillo', 40, 630), N('Comprador casual.', 'verde', 165, 630), N('Estudios Universitarios.', 'azul', 250, 560),
+        N('No sabe de gustos, se mueve más por "la situación".', 'amarillo', 430, 110), N('Se basa en vinos recomendados, aunque muchas veces sus amigos no tienen ni idea.', 'rosa', 610, 100),
+        N('Solo conoce tinto o rosado, pero distingue ciertos vinos para distintos momentos.', 'amarillo', 430, 250), N('Quiere saber de vinos, pero lo mínimo.', 'amarillo', 610, 255),
+        N('Entender si el precio era un decisor.', 'verde', 850, 115), N('Cuáles son los packaging que a él más le llaman la atención.', 'amarillo', 1040, 230),
+        N('Trata de buscar en la etiqueta composiciones para luego explicar el porqué de la compra.', 'amarillo', 420, 455), N('Nunca habla del vino, sino sobre el momento en el que lo tomó.', 'rosa', 620, 450),
+        N('Solo compra vino para momentos muy puntuales, no a diario.', 'rosa', 430, 610), N('El contenido para él es lo de menos, no aprecia sabores.', 'azul', 620, 600),
+        N('¿Por qué busca vinos por internet pero luego no compra?', 'amarillo', 860, 520), N('¿Por qué para saber más no acude a una vinoteca?', 'amarillo', 1040, 480)
+      ]
+    },
+    guide: {
+      objetivo: 'Preparar, realizar y analizar una entrevista en profundidad para descubrir motivaciones y comportamientos que el usuario no expresa de forma directa.',
+      pasos: [
+        'Definan objetivos y límites: qué quieren aprender y qué queda fuera.',
+        'Redacten un guion de preguntas abiertas (qué, cómo, cuándo, por qué) y eviten las de sí/no.',
+        'Registren el perfil de la persona entrevistada y su relación con el tema.',
+        'Durante la entrevista, uno pregunta y otro toma notas literales.',
+        'Justo después, vuelquen observaciones en los cuatro cuadrantes: una idea por post-it.',
+        'Cierren con las dudas que abren la siguiente ronda de investigación.'
+      ],
+      caso: 'Jóvenes compradores de vino: Ramón, 30 años, comercial de seguros y comprador casual. Descubrimos que se mueve por la situación más que por el sabor, que busca en la etiqueta argumentos para justificar la compra y que no acude a vinotecas.'
+    },
+    kb: {
+      que: 'Aquí preparas y analizas una <b>entrevista en profundidad</b>. A la izquierda va el guion y el perfil del entrevistado; a la derecha, tus <b>observaciones</b> en cuatro cuadrantes: lo que descubriste, lo que faltó, lo que te impactó y dónde profundizar.',
+      ejemplo: { text: 'Compra el vino según con quién lo va a tomar, no por la uva.', color: 'amarillo', zone: 'obs1' },
+      chip: '¿Cómo hago buenas preguntas?'
+    },
+    welcome: '¡Hola! Soy tu asistente de Hesmiter. Te ayudo a preparar tu guion y a convertir lo que escuchaste en observaciones útiles. ¿Ya definiste el objetivo de la entrevista?'
+  },
+
+  misterioso: {
+    name: 'Cliente Misterioso', phase: 'explorar', group: 'INVESTIGACIÓN',
+    sheetTitle: 'CLIENTE MISTERIOSO.', sheetSub: 'EXPLORAR/INVESTIGACIÓN',
+    zones: [
+      { id: 'personaje', x: 20, y: 20, w: 360, h: 230, title: 'TU PERSONAJE', sub: '¿Quién eres? ¿Define tu personaje?', hint: 'El papel que vas a interpretar: edad, situación familiar, poder adquisitivo…' },
+      { id: 'escena', x: 20, y: 265, w: 360, h: 230, title: 'LA ESCENA/SITUACIÓN', sub: '¿Dónde ocurre la acción?', hint: 'El lugar y el contexto en el que vivirás la experiencia.' },
+      { id: 'objetivo', x: 20, y: 510, w: 360, h: 230, title: 'OBJETIVO', sub: '¿Qué quieres comprender? ¿Qué quieres aprender?', hint: 'Lo que vas a observar con atención durante la visita.' },
+      { id: 'esperabas', x: 400, y: 20, w: 780, h: 230, q: true, title: '¿Qué esperabas que pasara y no ha pasado?', hint: 'Expectativas no cumplidas: comparan lo que imaginabas con lo que viviste.' },
+      { id: 'descubierto', x: 400, y: 265, w: 780, h: 230, q: true, title: '¿Qué has descubierto que no sabías?', hint: 'Servicios, detalles o comportamientos que te sorprendieron.' },
+      { id: 'sentido', x: 400, y: 510, w: 780, h: 230, q: true, title: '¿Cómo te has sentido? ¿Por qué?', hint: 'Emociones vividas y su causa. Empieza con la emoción: «Frustrado. …»' }
+    ],
+    decor: () => '',
+    example: {
+      extra: {},
+      notes: [
+        N('Padre Primerizo 38 años.', 'azul', 40, 110), N('Pareja estable. 2 hijos gemelos.', 'azul', 250, 40), N('Poder adquisitivo medio bajo.', 'azul', 175, 125),
+        N('Parque Acuático.', 'rosa', 50, 360), N('Vacaciones familiares.', 'rosa', 220, 350),
+        N('Cómo es un parque acuático con niños pequeños.', 'amarillo', 30, 610), N('Cuáles son los sistemas de seguridad para los niños.', 'amarillo', 145, 630), N('Atracciones vs. espera ¿Cómo son las colas?', 'amarillo', 255, 600),
+        N('Las atracciones de los adultos muy potentes, las de los niños su antagónico.', 'verde', 440, 90), N('Esperaba que hubiera más vigilantes en la zona de los niños.', 'rosa', 640, 80),
+        N('"Pocos sitios con sombra para descansar"', 'azul', 830, 80), N('"Seguimos con la foto souvenir, ¿no existe algo más?"', 'amarillo', 1030, 50),
+        N('Mucha variedad de restaurantes.', 'verde', 430, 340), N('Sistemas de localización para los menores (pulseras).', 'amarillo', 575, 330),
+        N('Canguro en el propio parque para que los padres descansen.', 'verde', 720, 345), N('"La cola especial": pagar un poco más para no esperar.', 'amarillo', 865, 305),
+        N('Las facilidades para comprar la entrada con cualquier oferta.', 'verde', 1040, 350),
+        N('Satisfecho. Había bastantes servicios para que los padres "se olvidaran de los niños".', 'azul', 470, 590),
+        N('Descontento. Las atracciones eran espectaculares, pero separaban a niños y adultos.', 'rosa', 640, 590),
+        N('Frustrado. Siguen existiendo colas. Hay un servicio de cola rápida, pero no sabes que existe hasta que sufres la cola.', 'rosa', 810, 565)
+      ]
+    },
+    guide: {
+      objetivo: 'Vivir en primera persona la experiencia del servicio, interpretando a un usuario, para detectar expectativas, descubrimientos y emociones reales.',
+      pasos: [
+        'Definan el personaje que van a interpretar y por qué representa al usuario objetivo.',
+        'Elijan la escena: lugar, momento y contexto de la visita.',
+        'Acuerden qué quieren comprender o aprender (máximo tres objetivos).',
+        'Vivan la experiencia sin revelar que están investigando; tomen notas o fotos discretas.',
+        'Al salir, vuelquen expectativas no cumplidas, descubrimientos y emociones, cada uno con su «por qué».'
+      ],
+      caso: 'Un padre primerizo de 38 años con gemelos visita un parque acuático en vacaciones familiares. Descubre servicios para que los padres descansen, pero también colas, poca sombra y atracciones que separan a niños y adultos.'
+    },
+    kb: {
+      que: 'Aquí registras una visita como <b>cliente misterioso</b>. A la izquierda defines tu personaje, la escena y tu objetivo; a la derecha vuelcas lo que esperabas y no pasó, lo que descubriste y cómo te sentiste.',
+      ejemplo: { text: 'Esperaba un mapa claro de las zonas infantiles y no lo encontré.', color: 'verde', zone: 'esperabas' },
+      chip: '¿Cómo preparo mi personaje?'
+    },
+    welcome: '¡Hola! Soy tu asistente de Hesmiter. Vamos a preparar tu visita como cliente misterioso: personaje, escena y objetivo. ¿Qué servicio vas a vivir?'
+  },
+
+  empatia: {
+    name: 'Mapa de Empatía', phase: 'explorar', group: 'SÍNTESIS',
+    sheetTitle: 'MAPA DE EMPATÍA.', sheetSub: 'EXPLORAR/SÍNTESIS',
+    zones: [
+      { id: 'piensa', x: 20, y: 20, w: 565, h: 230, title: 'PIENSA', hint: 'Lo que el usuario piensa pero quizá no dice: preocupaciones, juicios internos, aspiraciones. Suele ir entre comillas como pensamiento.' },
+      { id: 'dice', x: 615, y: 20, w: 565, h: 230, align: 'right', title: 'DICE', hint: 'Lo que expresa en voz alta, ante otros. Frases literales. Compara con PIENSA: las contradicciones son insights.' },
+      { id: 'siente', x: 20, y: 265, w: 565, h: 230, title: 'SIENTE', hint: 'Emociones: miedos, frustraciones, ilusiones. Qué le preocupa de verdad.' },
+      { id: 'hace', x: 615, y: 265, w: 565, h: 230, align: 'right', title: 'HACE', hint: 'Comportamientos observables: qué compra, dónde va, cómo actúa.' },
+      { id: 'oye', x: 20, y: 510, w: 565, h: 230, title: 'OYE', hint: 'Lo que escucha de su entorno: amigos, familia, medios, influencers.' },
+      { id: 've', x: 615, y: 510, w: 565, h: 230, align: 'right', title: 'VE', hint: 'Lo que observa a su alrededor: el mercado, su entorno, lo que le ofrecen.' }
+    ],
+    decor: () => `
+      <svg class="absolute inset-0" width="${W}" height="${H}" aria-hidden="true" fill="none" stroke="#111" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M612 742 L612 250 C612 215 640 190 650 150 C662 100 640 58 596 52 C560 48 540 72 543 100 C545 118 534 126 532 136 C530 144 542 146 544 152 C545 160 538 164 541 170 C544 178 552 176 552 184 C552 196 560 204 578 204 L596 204"/>
+        <path d="M612 285 C630 330 690 352 740 320 C760 306 780 300 810 312" stroke-width="7"/>
+        <ellipse cx="470" cy="75" rx="44" ry="24" stroke-width="3"/><circle cx="522" cy="96" r="5" stroke-width="3"/><circle cx="534" cy="108" r="3" stroke-width="2.5"/>
+        <path d="M700 118 C700 100 720 92 746 92 C772 92 792 100 792 118 C792 136 772 144 746 144 C738 144 730 143 724 141 L708 152 L712 138 C704 134 700 126 700 118Z" stroke-width="3"/>
+        <path d="M512 350 C495 330 470 336 472 356 C474 376 512 392 512 392 C512 392 550 376 552 356 C554 336 529 330 512 350Z" stroke-width="3.5"/>
+      </svg>`,
+    example: {
+      extra: {},
+      notes: [
+        N('"Con lo que vale una pieza me compro 20 en el Ikea"', 'azul', 180, 45), N('"¡Uff! Esto mola, pero es demasiado caro para mí"', 'amarillo', 330, 75),
+        N('"La artesanía mola porque son productos hechos a mano"', 'amarillo', 860, 70),
+        N('"No le veo tanta diferencia a un producto hecho a mano que a uno vendido en Ikea"', 'rosa', 45, 340), N('"La artesanía es para gente mayor"', 'verde', 225, 355),
+        N('"No les veo nada especial por lo que tenga que pagar más"', 'rosa', 360, 262), N('"Muy artesano, pero sigue siendo una pieza cero personalizada"', 'amarillo', 450, 395),
+        N('Compra en tiendas tipo Ikea o Habitat.', 'rosa', 860, 340),
+        N('"Esto solo le interesa a un público muy especial"', 'azul', 90, 600), N('"Se está poniendo de moda"', 'verde', 260, 555), N('"Los regalos de artesanía son regalos extremadamente especiales"', 'amarillo', 410, 610),
+        N('"Hay muchos vídeos en internet donde se ve cómo se hacen las piezas"', 'azul', 700, 590), N('"En las piezas que venden por internet prima más el proceso que el producto"', 'rosa', 900, 590)
+      ]
+    },
+    guide: {
+      objetivo: 'Sintetizar lo aprendido del usuario en sus dimensiones racional y emocional para ponerse en su lugar y descubrir tensiones entre lo que piensa, dice y hace.',
+      pasos: [
+        'Reúnan el material de la investigación: entrevistas, cliente misterioso, observaciones.',
+        'Coloquen primero lo observable: lo que DICE, HACE, OYE y VE.',
+        'Después infieran lo que PIENSA y SIENTE, apoyándose en las evidencias.',
+        'Busquen contradicciones entre cuadrantes (dice una cosa, hace otra): son insights valiosos.',
+        'Resuman en una frase el insight principal para llevarlo al Desafío de Diseño.'
+      ],
+      caso: 'Un comprador potencial de artesanía: piensa que es cara comparada con Ikea, dice que mola porque está hecha a mano, oye que se está poniendo de moda y ve vídeos del proceso de fabricación, pero sigue comprando en tiendas de gran consumo.'
+    },
+    kb: {
+      que: 'Aquí sintetizas cómo es tu usuario por dentro y por fuera. Lo <b>observable</b> va en DICE, HACE, OYE y VE; lo <b>interno</b>, en PIENSA y SIENTE. Las contradicciones entre ambos lados son tus mejores insights.',
+      ejemplo: { text: '"Me da vergüenza preguntar porque parece que debería saberlo"', color: 'rosa', zone: 'siente' },
+      chip: '¿Qué diferencia hay entre PIENSA y DICE?'
+    },
+    welcome: '¡Hola! Soy tu asistente de Hesmiter. Te ayudo a separar lo que tu usuario piensa, dice, siente y hace. ¿Empezamos por lo que escuchaste literalmente?'
+  },
+
+  desafio: {
+    name: 'Desafío de Diseño', phase: 'explorar', group: 'SÍNTESIS',
+    sheetTitle: 'DESAFÍO DE DISEÑO.', sheetSub: 'EXPLORAR/SÍNTESIS',
+    zones: [
+      { id: 'necesidad', x: 340, y: 40, w: 820, h: 125, titlePos: 'middle', align: 'center', title: 'NECESIDAD', hint: 'Lo que el usuario necesita resolver, expresado con verbos (entender, elegir, sentirse…).' },
+      { id: 'dolor', x: 340, y: 200, w: 370, h: 320, titlePos: 'middle', align: 'center', title: 'DOLOR', hint: 'Frustraciones, miedos y obstáculos que sufre hoy.' },
+      { id: 'ganancia', x: 790, y: 200, w: 370, h: 320, shape: 'ellipse', titlePos: 'middle', align: 'center', title: 'GANANCIA', hint: 'Lo que ganaría o sentiría si el problema se resolviera.' },
+      { id: 'desafio', x: 340, y: 560, w: 820, h: 160, titlePos: 'middle', align: 'center', title: 'DESAFÍO', hint: 'Retos redactados como «¿Cómo podría…?» que conecten un dolor con una ganancia.' }
+    ],
+    decor: () => `
+      <svg class="absolute inset-0" width="${W}" height="${H}" aria-hidden="true"><ellipse cx="170" cy="380" rx="145" ry="108" fill="#8c9097"/></svg>
+      <div class="absolute sheet-title text-white text-center" style="left:40px;top:358px;width:260px;font-size:28px">¿CÓMO PODRÍA... <span class="tip pe tip-r" tabindex="0" style="border-color:#fff;color:#fff">i<span class="tip-box">Todo reto empieza con «¿Cómo podría…?»: es abierto, optimista y deja espacio a muchas soluciones.</span></span></div>`,
+    example: {
+      extra: {},
+      notes: [
+        N('Vinos para contextos determinados', 'verde', 470, 55), N('Tener conocimientos mínimos sin ser un experto', 'rosa', 830, 50),
+        N('Quedar mal ante la pareja o los suegros', 'verde', 365, 215), N('No acertar con el vino para una determinada elección.', 'azul', 365, 400),
+        N('Cree que un vino bueno debe ser caro', 'amarillo', 570, 395), N('Acertar con facilidad con el vino.', 'azul', 840, 215),
+        N('Sorprender', 'amarillo', 1065, 300), N('Ganar puntos delante de su suegro o pareja.', 'verde', 880, 400),
+        N('...hacer que la gente joven supiera qué vino elegir dependiendo de la situación?', 'amarillo', 365, 575),
+        N('...hacer que la gente joven comprendiera al instante que ese vino es el mejor para él?', 'rosa', 560, 585),
+        N('...una persona joven que no sabe de vinos sorprender a un entendido en la materia?', 'amarillo', 910, 575)
+      ]
+    },
+    guide: {
+      objetivo: 'Convertir necesidades, dolores y ganancias en retos de diseño accionables formulados como «¿Cómo podría…?».',
+      pasos: [
+        'Traigan los insights del Mapa de Empatía y la investigación.',
+        'Escriban la necesidad principal del usuario en la franja superior.',
+        'Coloquen los dolores (izquierda) y las ganancias esperadas (derecha).',
+        'Conecten un dolor con una ganancia y redáctenlo como «¿Cómo podría…?» en la franja DESAFÍO.',
+        'Evalúen cada reto: ni tan amplio que paralice ni tan estrecho que ya incluya la solución. Elijan uno.'
+      ],
+      caso: 'Vinos para gente joven: el dolor de quedar mal ante la pareja o los suegros y la ganancia de sorprender dan lugar al reto «¿Cómo podría una persona joven que no sabe de vinos sorprender a un entendido en la materia?».'
+    },
+    kb: {
+      que: 'Aquí transformas lo aprendido en un <b>reto de diseño</b>. Arriba va la necesidad, en el centro los dolores y las ganancias, y abajo tus retos redactados como «¿Cómo podría…?».',
+      ejemplo: { text: '...ayudar a un joven a elegir un vino en menos de un minuto sin sentirse inexperto?', color: 'amarillo', zone: 'desafio' },
+      chip: '¿Cómo redacto un «¿Cómo podría…?»?'
+    },
+    welcome: '¡Hola! Soy tu asistente de Hesmiter. Vamos a convertir dolores y ganancias en un buen «¿Cómo podría…?». ¿Qué necesidad detectaste en tu investigación?'
+  }
+};
+
+const PHASES = {
+  mapear:   { label: 'Mapear',   sub: 'Comprender el contexto', groups: [['COMPAÑÍA', ['analogos']], ['CLIENTE / MERCADO', ['stakeholders', 'persona', 'journey']]] },
+  explorar: { label: 'Explorar', sub: 'Investigar y sintetizar', groups: [['INVESTIGACIÓN', ['entrevista', 'misterioso']], ['SÍNTESIS', ['empatia', 'desafio']]] }
+};
+
+/* =========================== Estado global =========================== */
+let cfg = null;                      // { user, room, url, key }
+let state = null;                    // estado del canvas de la sala
+let current = { phase: 'mapear', tool: 'analogos' };
+let selColor = 'amarillo';
+let scale = 1, zoomMode = 'fit';
+let sb = null, channel = null, syncMode = 'local', onlineUsers = [];
+let readOnlyReview = false, reviewToken = null;
+let pendingRemoteRender = false;
+let hilosNoteId = null;
+const myId = localStorage.getItem(LS_UID) || (() => { const id = uid(); localStorage.setItem(LS_UID, id); return id; })();
+
+function blankState() { return { tools: {}, chat: [], blog: [], threads: {}, delivered: null, updatedAt: 0 }; }
+function normalizeState(s) {
+  const b = blankState();
+  s = Object.assign(b, s || {});
+  s.tools = s.tools || {}; s.chat = s.chat || []; s.blog = s.blog || []; s.threads = s.threads || {};
+  return s;
+}
+function toolState(id) {
+  if (!state.tools[id]) state.tools[id] = { notes: [], meta: {}, extra: {} };
+  const t = state.tools[id]; t.notes ||= []; t.meta ||= {}; t.extra ||= {};
+  return t;
+}
+const lsKey = () => 'hermiter_state_' + cfg.room;
+let quotaWarned = false;
+function saveLocal() {
+  state.updatedAt = Date.now();
+  try { localStorage.setItem(lsKey(), JSON.stringify(state)); }
+  catch (e) { if (!quotaWarned) { quotaWarned = true; toast('El navegador no tiene espacio para guardar todo el lienzo. Quita archivos adjuntos grandes o conecta Supabase.', 'warn'); } }
+}
+const saveLocalSoon = debounce(saveLocal, 300);
+function loadLocal() {
+  try { return normalizeState(JSON.parse(localStorage.getItem(lsKey()) || 'null')); } catch { return blankState(); }
+}
+const isLocked = () => readOnlyReview || !!state?.delivered;
+
+/* ================================ Toasts ================================ */
+function toast(msg, type = 'ok') {
+  const el = document.createElement('div');
+  const tone = type === 'warn' ? 'bg-amber text-ink' : type === 'err' ? 'bg-[#d7373f] text-white' : 'bg-ink text-white';
+  el.className = `toast-enter max-w-sm rounded-xl px-4 py-3 text-sm font-medium shadow-xl ${tone}`;
+  el.textContent = msg;
+  $('#toasts').appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }, 3600);
+}
+
+/* ============================== Modal genérico ============================== */
+function openModal(html) { $('#modal-box').innerHTML = html; $('#modal').classList.remove('hidden'); }
+function closeModal() { $('#modal').classList.add('hidden'); }
+$('#modal').addEventListener('click', e => { if (e.target.id === 'modal' || e.target.closest('[data-modal-close]')) closeModal(); });
+function confirmDialog(title, text, okLabel = 'Aceptar') {
+  return new Promise(res => {
+    openModal(`<h3 class="text-lg font-extrabold">${esc(title)}</h3><p class="mt-2 text-sm text-slate-600">${esc(text)}</p>
+      <div class="mt-6 flex justify-end gap-2"><button data-modal-close class="pill px-4 py-2 text-sm font-semibold hover:bg-paper" id="cf-no">Cancelar</button>
+      <button id="cf-ok" class="pill bg-ink text-white px-4 py-2 text-sm font-semibold">${esc(okLabel)}</button></div>`);
+    $('#cf-ok').onclick = () => { closeModal(); res(true); };
+    $('#cf-no').onclick = () => res(false);
+  });
+}
+
+/* ================================ LANDING ================================ */
+function buildHeroBoard() {
+  const board = $('#hero-board');
+  const cols = ['ANTES', 'DURANTE', 'DESPUÉS'];
+  let h = `<div class="absolute inset-[4%] rounded-lg bg-white border border-slate-200 shadow-sm"></div>`;
+  cols.forEach((c, i) => h += `<div class="absolute text-center font-sheet font-semibold text-slate-400 text-[1.3vw] sm:text-xs tracking-wider" style="left:${14 + i * 28}%;width:26%;top:7%">${c}</div>`);
+  const notes = [
+    ['Reserva online', 'verde'], ['Llego al hotel', 'amarillo'], ['Check-in', 'rosa'], ['Busco el gym', 'azul'], ['Cena en habitación', 'naranja'], ['Salida', 'verde'],
+    ['E-mail', 'verde'], ['Recepción', 'amarillo'], ['"Otra vez mis datos"', 'rosa'], ['Panfleto', 'azul'], ['"¿Entra en dietas?"', 'naranja'], ['"Factura rápido"', 'verde']
+  ];
+  notes.forEach(([t, c], i) => {
+    const col = i % 6, row = Math.floor(i / 6);
+    const rot = ((i * 37) % 7) - 3;
+    h += `<div class="mini-note" style="left:${8 + col * 14.2}%;top:${15 + row * 23}%;background:${COLORS[c].bg};color:${COLORS[c].fg};transform:rotate(${rot}deg)">${esc(t)}</div>`;
+  });
+  h += `<svg class="absolute" style="left:8%;top:64%;width:85%;height:28%" viewBox="0 0 850 200" preserveAspectRatio="none" aria-hidden="true">
+      <line x1="0" y1="30" x2="850" y2="30" stroke="#e2e5e9" stroke-dasharray="4 5"/><line x1="0" y1="170" x2="850" y2="170" stroke="#e2e5e9" stroke-dasharray="4 5"/>
+      <polyline points="60,40 200,45 340,150 480,160 620,90 760,50" fill="none" stroke="#9aa1a9" stroke-width="3"/>
+      ${[[60, 40], [200, 45], [340, 150], [480, 160], [620, 90], [760, 50]].map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="13" fill="${y > 120 ? '#e85466' : '#9aa1a9'}"/><text x="${x}" y="${y + 4}" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">${i + 1}</text>`).join('')}
+    </svg>`;
+  const cursor = (cls, color, name) => `<div class="cursor ${cls}" style="width:7%"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M1 1l6 15 2.2-6.3L16 7.5z" fill="${color}" stroke="#fff" stroke-width="1.2"/></svg><span class="inline-block ml-3 -mt-1 rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style="background:${color}">${name}</span></div>`;
+  h += cursor('cursor-a', '#1F8F8C', 'Ana') + cursor('cursor-b', '#F5A524', 'Luis');
+  board.innerHTML = h;
+}
+
+function loadConfig() { try { return JSON.parse(localStorage.getItem(LS_CONFIG) || 'null'); } catch { return null; } }
+
+$$('[data-start]').forEach(b => b.addEventListener('click', () => {
+  const saved = loadConfig();
+  if (saved && saved.user && saved.room) { cfg = saved; enterWorkspace(); return; }
+  $('#cfg-url').value = SUPABASE_URL; $('#cfg-key').value = SUPABASE_ANON_KEY;
+  $('#config-modal').classList.remove('hidden'); setTimeout(() => $('#cfg-user').focus(), 50);
+}));
+$('[data-close-modal]').addEventListener('click', () => $('#config-modal').classList.add('hidden'));
+$('#config-form').addEventListener('submit', e => {
+  e.preventDefault();
+  cfg = { user: $('#cfg-user').value.trim(), room: $('#cfg-room').value.trim(), url: $('#cfg-url').value.trim(), key: $('#cfg-key').value.trim() };
+  if (!cfg.user || !cfg.room) return;
+  localStorage.setItem(LS_CONFIG, JSON.stringify(cfg));
+  $('#config-modal').classList.add('hidden');
+  enterWorkspace();
+});
+
+/* =============================== WORKSPACE =============================== */
+function enterWorkspace() {
+  state = loadLocal();
+  $('#landing').classList.add('hidden');
+  $('#workspace').classList.remove('hidden'); $('#workspace').classList.add('flex');
+  $('#bot-fab').classList.remove('hidden');
+  $('#ws-room').textContent = 'Sala: ' + cfg.room;
+  $('#user-chip').innerHTML = `<span class="w-7 h-7 rounded-full grid place-items-center text-[11px] text-white" style="background:${colorFor(cfg.user)}">${esc(initials(cfg.user))}</span>${esc(cfg.user)}`;
+  renderAll();
+  initSupabase();
+  initBot();
+}
+
+function renderAll() {
+  applyLock();
+  renderPhaseTabs();
+  renderToolMenu();
+  renderCanvas();
+  renderPresence();
+  renderChat(); renderBlog(); renderHilos();
+}
+
+function applyLock() {
+  document.body.classList.toggle('readonly', isLocked());
+  const b = $('#lock-banner');
+  if (readOnlyReview) {
+    const valid = state.delivered && state.delivered.token === reviewToken;
+    b.className = 'mb-3 rounded-xl px-4 py-3 text-sm font-medium ' + (valid ? 'bg-teal/10 text-teal' : 'bg-amber/15 text-ink');
+    b.innerHTML = valid
+      ? `🎓 Vista de revisión docente. Entregado por <b>${esc(state.delivered.by)}</b> el ${fmtTime(state.delivered.at)}. Solo lectura.`
+      : `Este enlace de revisión aún no coincide con una entrega sincronizada. Si el equipo usa Supabase, revisa que este navegador tenga las mismas llaves; en modo local el enlace solo funciona en el equipo que entregó.`;
+  } else if (state.delivered) {
+    b.className = 'mb-3 rounded-xl px-4 py-3 text-sm font-medium bg-teal/10 text-teal flex flex-wrap items-center gap-3';
+    b.innerHTML = `<span>🎓 Entregado al profesor el ${fmtTime(state.delivered.at)} por <b>${esc(state.delivered.by)}</b>. El lienzo está en solo lectura.</span>
+      <button id="btn-link" class="pill border border-teal px-3 py-1 text-xs font-semibold hover:bg-teal hover:text-white">Ver enlace</button>
+      <button id="btn-reopen" class="pill bg-teal text-white px-3 py-1 text-xs font-semibold">Reabrir edición</button>`;
+    $('#btn-link').onclick = showShareLink;
+    $('#btn-reopen').onclick = reopenCanvas;
+  } else { b.className = 'hidden'; b.innerHTML = ''; }
+  // En modo bloqueado se muestran los botones del header solo si no es revisión
+  $('#btn-save').classList.toggle('hidden', readOnlyReview);
+  $('#btn-share').classList.toggle('hidden', readOnlyReview);
+}
+
+/* ------------------------- Fases y menú dinámico ------------------------- */
+function renderPhaseTabs() {
+  $('#phase-tabs').innerHTML = Object.entries(PHASES).map(([id, p]) => `
+    <button role="tab" aria-selected="${current.phase === id}" data-phase="${id}"
+      class="pill px-5 py-2 text-sm font-semibold transition ${current.phase === id ? 'bg-ink text-white shadow' : 'text-slate-600 hover:text-ink'}">
+      ${p.label} <span class="hidden sm:inline font-normal ${current.phase === id ? 'text-white/70' : 'text-slate-400'}">· ${p.sub}</span>
+    </button>`).join('');
+  $$('[data-phase]').forEach(b => b.onclick = () => {
+    current.phase = b.dataset.phase;
+    current.tool = PHASES[current.phase].groups[0][1][0];
+    renderPhaseTabs(); renderToolMenu(); renderCanvas(); onToolChanged();
+  });
+}
+function renderToolMenu() {
+  $('#tool-menu').innerHTML = PHASES[current.phase].groups.map(([g, ids]) => `
+    <div>
+      <div class="text-[11px] font-semibold text-slate-400 mb-1.5">${g.charAt(0) + g.slice(1).toLowerCase()}</div>
+      <div class="flex flex-wrap gap-1.5">${ids.map(id => `
+        <button data-tool="${id}" class="pill px-3.5 py-1.5 text-sm font-medium border transition ${current.tool === id ? 'bg-ink text-white border-ink' : 'bg-white border-slate-200 text-slate-700 hover:border-ink hover:text-ink'}">${TOOLS[id].name}</button>`).join('')}
+      </div>
+    </div>`).join('');
+  $$('[data-tool]').forEach(b => b.onclick = () => { current.tool = b.dataset.tool; renderToolMenu(); renderCanvas(); onToolChanged(); });
+}
+function onToolChanged() { hilosNoteId = null; renderHilos(); botToolChanged(); }
+
+/* ------------------------------- Canvas ------------------------------- */
+function renderCanvas() {
+  const tool = TOOLS[current.tool], t = toolState(current.tool);
+  // valores por defecto del encabezado de la ficha
+  t.meta.proyecto ??= cfg.room; t.meta.disenado ??= cfg.user;
+  t.meta.fecha ??= new Date().toISOString().slice(0, 10); t.meta.version ??= '1.0';
+  const dis = isLocked() ? 'disabled' : '';
+  const metaField = (k, l, type = 'text') => `<label class="flex items-center gap-2"><span class="meta-label w-[86px] shrink-0 text-right">${l}</span><input ${dis} type="${type}" class="meta-input" data-meta="${k}" value="${esc(t.meta[k])}"></label>`;
+
+  $('#canvas-card').innerHTML = `
+    <div class="bg-sheet px-4 sm:px-5 py-3 flex flex-col lg:flex-row lg:items-center gap-3">
+      <h2 class="leading-none"><span class="sheet-title text-[26px] sm:text-[30px]">${tool.sheetTitle}</span><span class="sheet-sub text-[16px] sm:text-[18px]">${tool.sheetSub}</span></h2>
+      <div class="lg:ml-auto grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 w-full lg:w-[560px]">
+        ${metaField('proyecto', 'PROYECTO')}${metaField('fecha', 'FECHA', 'date')}${metaField('disenado', 'DISEÑADO POR')}${metaField('version', 'VERSIÓN')}
+      </div>
+    </div>
+    <div class="px-3 sm:px-5 py-3 border-b border-slate-200 flex flex-wrap items-center gap-2">
+      <div class="edit-only flex items-center gap-1.5 mr-1" role="radiogroup" aria-label="Color de la nueva nota">
+        ${Object.entries(COLORS).map(([k, c]) => `<button data-sel-color="${k}" role="radio" aria-checked="${selColor === k}" title="${c.label}" class="w-6 h-6 rounded-full transition ${selColor === k ? 'ring-2 ring-offset-2 ring-ink' : 'hover:scale-110'}" style="background:${c.bg}"></button>`).join('')}
+      </div>
+      <button id="btn-add" class="edit-only pill bg-ink text-white text-sm font-semibold px-4 py-1.5 hover:bg-[#0c1d36]">+ Nota</button>
+      <button id="btn-guide" class="pill border border-slate-300 text-sm font-semibold px-4 py-1.5 hover:border-ink">📖 Guía de la Herramienta</button>
+      <button id="btn-example" class="edit-only pill border border-slate-300 text-sm font-semibold px-4 py-1.5 hover:border-ink">Cargar ejemplo</button>
+      <button id="btn-clear" class="edit-only pill text-sm font-semibold px-3 py-1.5 text-slate-500 hover:text-[#d7373f]">Limpiar</button>
+      <div class="ml-auto flex items-center gap-1 text-sm">
+        <button data-zoom="-" class="w-8 h-8 rounded-full hover:bg-paper font-bold" aria-label="Alejar">−</button>
+        <button data-zoom="fit" class="px-2 h-8 rounded-full hover:bg-paper text-xs font-semibold" id="zoom-label">Ajustar</button>
+        <button data-zoom="+" class="w-8 h-8 rounded-full hover:bg-paper font-bold" aria-label="Acercar">+</button>
+      </div>
+    </div>
+    <div id="tool-panel"></div>
+    <div id="board-wrap" class="relative overflow-auto scroll-thin p-3" style="max-height:calc(100vh - 120px)">
+      <div id="board-scaler" class="relative"><div id="board"></div></div>
+    </div>
+    <div id="alt-view" class="hidden"></div>`;
+
+  $$('[data-sel-color]').forEach(b => b.onclick = () => { selColor = b.dataset.selColor; renderCanvasToolbarColors(); });
+  $$('[data-meta]').forEach(i => i.addEventListener('input', () => { t.meta[i.dataset.meta] = i.value; commit(current.tool); }));
+  $('#btn-add').onclick = () => addNoteAtView();
+  $('#btn-guide').onclick = openGuide;
+  $('#btn-example').onclick = loadExample;
+  $('#btn-clear').onclick = clearTool;
+  $$('[data-zoom]').forEach(b => b.onclick = () => {
+    const z = b.dataset.zoom;
+    if (z === 'fit') zoomMode = 'fit'; else { zoomMode = 'manual'; scale = clamp(scale + (z === '+' ? .1 : -.1), .4, 1.6); }
+    fitBoard();
+  });
+
+  renderToolPanel();
+  renderBoard();
+}
+function renderCanvasToolbarColors() {
+  $$('[data-sel-color]').forEach(b => {
+    const on = b.dataset.selColor === selColor;
+    b.setAttribute('aria-checked', on);
+    b.className = `w-6 h-6 rounded-full transition ${on ? 'ring-2 ring-offset-2 ring-ink' : 'hover:scale-110'}`;
+  });
+}
+
+function fitBoard() {
+  const wrap = $('#board-wrap'); if (!wrap || wrap.classList.contains('hidden')) return;
+  if (zoomMode === 'fit') scale = clamp((wrap.clientWidth - 24) / W, .5, 1.25);
+  $('#board').style.transform = `scale(${scale})`;
+  $('#board-scaler').style.width = W * scale + 'px';
+  $('#board-scaler').style.height = H * scale + 'px';
+  const zl = $('#zoom-label'); if (zl) zl.textContent = zoomMode === 'fit' ? 'Ajustar' : Math.round(scale * 100) + '%';
+}
+window.addEventListener('resize', debounce(fitBoard, 120));
+
+function tipHTML(text, extraCls = '') { return `<span class="tip ${extraCls}" tabindex="0" aria-label="Ayuda">i<span class="tip-box">${esc(text)}</span></span>`; }
+function zoneHTML(z) {
+  const pos = z.titlePos || 'top', align = z.align || 'left';
+  const title = z.title ? `<div class="${z.q ? 'zone-q' : 'zone-title'}">${esc(z.title)}${z.hint ? tipHTML(z.hint) : ''}</div>` : (z.hint ? tipHTML(z.hint) : '');
+  return `<div class="zone ${z.shape || 'rect'}" data-zone="${z.id}" style="left:${z.x}px;top:${z.y}px;width:${z.w}px;height:${z.h}px">
+    <div class="zone-head ${pos} ${align}">${title}${z.sub ? `<div class="zone-sub">${esc(z.sub)}</div>` : ''}</div>
+    ${z.noAdd ? '' : `<button class="zone-add ${align === 'right' ? 'add-l' : 'add-r'}" data-add-zone="${z.id}">+ Nota</button>`}
+  </div>`;
+}
+
+function renderBoard() {
+  const tool = TOOLS[current.tool], t = toolState(current.tool);
+  const board = $('#board'); if (!board) return;
+  board.innerHTML = `
+    <div class="layer zones">${tool.zones.map(zoneHTML).join('')}</div>
+    <div class="layer decor">${tool.decor(t)}</div>
+    <svg class="layer links" width="${W}" height="${H}" id="links-svg"></svg>
+    <div class="layer notes" id="notes-layer"></div>`;
+  const layer = $('#notes-layer');
+  t.notes.forEach(n => layer.appendChild(noteEl(n)));
+  // Campos editables de la decoración
+  $$('[data-extra]', board).forEach(el => {
+    el.contentEditable = isLocked() ? 'false' : 'true';
+    el.addEventListener('blur', () => { t.extra[el.dataset.extra] = el.innerText.trim(); commit(current.tool); });
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); el.blur(); } });
+  });
+  $$('[data-extra-input]', board).forEach(el => {
+    el.readOnly = isLocked();
+    el.addEventListener('input', () => { t.extra[el.dataset.extraInput] = el.value; commit(current.tool); });
+  });
+  $$('[data-add-zone]', board).forEach(b => b.onclick = e => { e.stopPropagation(); addNoteInZone(b.dataset.addZone); });
+  bindEmotion();
+  drawLinks();
+  fitBoard();
+}
+
+/* ------------------------------ Post-its ------------------------------ */
+function noteEl(n) {
+  const c = COLORS[n.color] || COLORS.amarillo;
+  const el = document.createElement('div');
+  el.className = 'note'; el.dataset.id = n.id;
+  el.style.cssText = `left:${n.x}px;top:${n.y}px;background:${c.bg};color:${c.fg}`;
+  const th = state.threads[n.id];
+  const hasThread = th && (th.desc || th.links?.length || th.files?.length);
+  el.innerHTML = `
+    <div class="note-text"></div>
+    <button class="note-ctl note-x" title="Eliminar nota" aria-label="Eliminar nota">×</button>
+    <button class="note-ctl note-edit" title="Editar texto" aria-label="Editar texto">✎</button>
+    <button class="note-ctl note-link" title="Relaciones e hilos" aria-label="Abrir hilo de la nota">🔗</button>
+    <div class="note-ctl note-palette">${Object.entries(COLORS).map(([k, cc]) => `<button data-c="${k}" title="${cc.label}" aria-label="Color ${cc.label}" style="background:${cc.bg}"></button>`).join('')}</div>
+    ${hasThread ? '<span class="note-badge" title="Tiene hilo o adjuntos">📎</span>' : ''}`;
+  $('.note-text', el).textContent = n.text || '';
+  el.addEventListener('pointerdown', onNotePointerDown);
+  el.addEventListener('dblclick', e => { if (!e.target.closest('.note-ctl')) startEdit(el); });
+  $('.note-edit', el).onclick = e => { e.stopPropagation(); startEdit(el); };
+  $('.note-x', el).onclick = e => { e.stopPropagation(); deleteNote(n.id); };
+  $('.note-link', el).onclick = e => { e.stopPropagation(); openSidebar('hilos'); hilosNoteId = n.id; renderHilos(); };
+  $$('.note-palette button', el).forEach(b => b.onclick = e => {
+    e.stopPropagation(); if (isLocked()) return;
+    n.color = b.dataset.c; const cc = COLORS[n.color];
+    el.style.background = cc.bg; el.style.color = cc.fg; commit(current.tool);
+  });
+  return el;
+}
+const findNote = id => toolState(current.tool).notes.find(n => n.id === id);
+
+function onNotePointerDown(e) {
+  const el = e.currentTarget;
+  if (e.button !== 0 || e.target.closest('.note-ctl')) return;
+  $$('.note.selected').forEach(x => x !== el && x.classList.remove('selected'));
+  el.classList.add('selected');
+  if (isLocked() || $('.note-text', el).isContentEditable) return;
+  const n = findNote(el.dataset.id); if (!n) return;
+  const start = { x: e.clientX, y: e.clientY, nx: n.x, ny: n.y };
+  let moved = false;
+  el.setPointerCapture(e.pointerId);
+  const move = ev => {
+    const dx = (ev.clientX - start.x) / scale, dy = (ev.clientY - start.y) / scale;
+    if (!moved && Math.hypot(dx, dy) < 3) return;
+    if (!moved) { moved = true; el.classList.add('dragging'); bringToFront(n, el); }
+    n.x = Math.round(clamp(start.nx + dx, 0, W - NOTE_W));
+    n.y = Math.round(clamp(start.ny + dy, 0, H - el.offsetHeight));
+    el.style.left = n.x + 'px'; el.style.top = n.y + 'px';
+    drawLinks();
+  };
+  const up = () => {
+    el.removeEventListener('pointermove', move);
+    el.classList.remove('dragging');
+    if (moved) commit(current.tool);
+  };
+  el.addEventListener('pointermove', move);
+  el.addEventListener('pointerup', up, { once: true });
+  el.addEventListener('pointercancel', up, { once: true });
+}
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.note')) $$('.note.selected').forEach(x => x.classList.remove('selected')); });
+
+function bringToFront(n, el) {
+  const t = toolState(current.tool);
+  t.notes = t.notes.filter(x => x !== n); t.notes.push(n);
+  el.parentNode.appendChild(el);
+}
+function startEdit(el) {
+  if (isLocked()) return;
+  const txt = $('.note-text', el), n = findNote(el.dataset.id); if (!n) return;
+  txt.contentEditable = 'true'; txt.focus();
+  const r = document.createRange(); r.selectNodeContents(txt);
+  const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+  const finish = () => {
+    txt.contentEditable = 'false';
+    n.text = txt.innerText.replace(/\n+$/, '').trim();
+    commit(current.tool); renderHilos();
+    if (pendingRemoteRender) { pendingRemoteRender = false; renderBoard(); }
+  };
+  txt.addEventListener('blur', finish, { once: true });
+  txt.onkeydown = e => { if (e.key === 'Escape' || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))) { e.preventDefault(); txt.blur(); } };
+  txt.onpaste = e => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData.getData('text/plain')); };
+}
+function addNote(toolId, x, y, text = '', color = selColor, edit = true) {
+  const t = toolState(toolId);
+  const n = { id: uid(), text, color, x: Math.round(clamp(x, 0, W - NOTE_W)), y: Math.round(clamp(y, 0, H - NOTE_H)), by: cfg.user };
+  t.notes.push(n);
+  commit(toolId);
+  if (toolId === current.tool && $('#notes-layer')) {
+    const el = noteEl(n); $('#notes-layer').appendChild(el);
+    if (edit) setTimeout(() => startEdit(el), 30);
+  }
+  return n;
+}
+function addNoteAtView() {
+  if (isLocked()) return;
+  if (current.tool === 'stakeholders' && toolState('stakeholders').extra.view === 'list') { setStkView('map'); }
+  const wrap = $('#board-wrap');
+  const cx = (wrap.scrollLeft + wrap.clientWidth / 2 - 12) / scale, cy = (wrap.scrollTop + Math.min(wrap.clientHeight, H * scale) / 2 - 12) / scale;
+  addNote(current.tool, cx - NOTE_W / 2 + (Math.random() * 60 - 30), cy - NOTE_H / 2 + (Math.random() * 60 - 30));
+}
+function zonePoint(toolId, zoneId) {
+  const z = TOOLS[toolId].zones.find(z => z.id === zoneId);
+  if (!z) return [W / 2 - NOTE_W / 2 + Math.random() * 80 - 40, H / 2 - NOTE_H / 2 + Math.random() * 80 - 40];
+  const top = (z.titlePos || 'top') === 'top' ? z.y + (z.sub ? 70 : 48) : z.y + 16;
+  return [z.x + 16 + Math.random() * Math.max(10, z.w - NOTE_W - 32), top + Math.random() * Math.max(10, z.h - NOTE_H - (top - z.y) - 50)];
+}
+function addNoteInZone(zoneId) { if (isLocked()) return; const [x, y] = zonePoint(current.tool, zoneId); addNote(current.tool, x, y); }
+function deleteNote(id) {
+  if (isLocked()) return;
+  const t = toolState(current.tool);
+  t.notes = t.notes.filter(n => n.id !== id);
+  (t.extra.list || []).forEach(i => { if (i.noteId === id) i.noteId = null; });
+  delete state.threads[id];
+  Object.values(state.threads).forEach(th => th.links = (th.links || []).filter(l => l !== id));
+  $(`.note[data-id="${id}"]`)?.remove();
+  drawLinks(); commit(current.tool); broadcast('threads', state.threads); renderHilos();
+  if (current.tool === 'stakeholders') renderToolPanel();
+}
+
+async function loadExample() {
+  if (isLocked()) return;
+  const t = toolState(current.tool), ex = TOOLS[current.tool].example;
+  if (t.notes.length && !(await confirmDialog('Cargar ejemplo', 'Se reemplazarán las notas actuales de esta herramienta por el ejemplo de referencia.', 'Cargar ejemplo'))) return;
+  t.notes = ex.notes.map(n => ({ ...n, id: uid(), by: 'Ejemplo' }));
+  const extra = JSON.parse(JSON.stringify(ex.extra || {}));
+  if (current.tool === 'stakeholders') {
+    extra.list = extra.list.map(([name, type, idx]) => ({ id: uid(), name, type, noteId: t.notes[idx].id }));
+  }
+  if (current.tool === 'journey') extra.points = extra.points.map(([label, score]) => ({ id: uid(), label, score }));
+  t.extra = extra;
+  commit(current.tool); renderToolPanel(); renderBoard();
+  toast('Ejemplo cargado. Úsalo como punto de partida.');
+}
+async function clearTool() {
+  if (isLocked()) return;
+  if (!(await confirmDialog('Limpiar lienzo', 'Se borrarán todas las notas de esta herramienta. Los datos del encabezado se conservan.', 'Limpiar'))) return;
+  const t = toolState(current.tool);
+  t.notes.forEach(n => delete state.threads[n.id]);
+  t.notes = []; t.extra = current.tool === 'stakeholders' ? { view: 'list', list: [] } : {};
+  commit(current.tool); renderToolPanel(); renderBoard();
+}
+
+/* ----------------------- Relaciones (líneas) ----------------------- */
+function drawLinks() {
+  const svg = $('#links-svg'); if (!svg) return;
+  const t = toolState(current.tool), ids = new Set(t.notes.map(n => n.id)), seen = new Set();
+  let h = '';
+  t.notes.forEach(n => (state.threads[n.id]?.links || []).forEach(l => {
+    if (!ids.has(l)) return; const key = [n.id, l].sort().join('|'); if (seen.has(key)) return; seen.add(key);
+    const a = $(`.note[data-id="${n.id}"]`), b = $(`.note[data-id="${l}"]`); if (!a || !b) return;
+    const m = findNote(l);
+    const ax = n.x + NOTE_W / 2, ay = n.y + a.offsetHeight / 2, bx = m.x + NOTE_W / 2, by = m.y + b.offsetHeight / 2;
+    const mx = (ax + bx) / 2, my = Math.min(ay, by) - 40;
+    h += `<path d="M${ax} ${ay} Q${mx} ${my} ${bx} ${by}" fill="none" stroke="#1F63C6" stroke-width="2.5" stroke-dasharray="6 5" opacity=".7"/>`;
+  }));
+  svg.innerHTML = h;
+}
+
+/* ---------------------- Paneles específicos por herramienta ---------------------- */
+function renderToolPanel() {
+  const panel = $('#tool-panel'); if (!panel) return;
+  const t = toolState(current.tool);
+  $('#alt-view').classList.add('hidden'); $('#board-wrap').classList.remove('hidden');
+
+  if (current.tool === 'stakeholders') {
+    t.extra.list ||= []; t.extra.view ||= (t.notes.length ? 'map' : 'list');
+    const legend = Object.values(STK_TYPES).map(s => `<span class="inline-flex items-center gap-1.5 text-xs text-slate-600"><span class="w-3 h-3 rounded-sm" style="background:${COLORS[s.color].bg}"></span><b>${s.label}</b><span class="hidden md:inline">${s.desc}</span></span>`).join('');
+    panel.innerHTML = `<div class="px-3 sm:px-5 py-3 border-b border-slate-200 flex flex-wrap items-center gap-3">
+      <div class="inline-flex rounded-full bg-paper p-1 text-sm font-semibold">
+        <button data-stk="list" class="pill px-4 py-1 ${t.extra.view === 'list' ? 'bg-white shadow text-ink' : 'text-slate-500'}">A · Lista de influenciadores</button>
+        <button data-stk="map" class="pill px-4 py-1 ${t.extra.view === 'map' ? 'bg-white shadow text-ink' : 'text-slate-500'}">B · Matriz concéntrica</button>
+      </div>
+      <div class="flex flex-wrap gap-x-4 gap-y-1">${legend}</div></div>`;
+    $$('[data-stk]', panel).forEach(b => b.onclick = () => setStkView(b.dataset.stk));
+    if (t.extra.view === 'list') renderStkList();
+    return;
+  }
+
+  if (current.tool === 'journey') {
+    t.extra.points ||= [];
+    panel.innerHTML = `<div class="px-3 sm:px-5 py-3 border-b border-slate-200">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-sm font-semibold text-ink mr-1">Curva emocional</span>
+        <span class="text-xs text-slate-500">Un punto por acción; ajusta la satisfacción con el control o arrastrando el punto en el lienzo.</span>
+        <button id="emo-add" class="edit-only ml-auto pill border border-slate-300 text-sm font-semibold px-3 py-1 hover:border-ink">+ Punto emocional</button>
+      </div>
+      <div id="emo-list" class="mt-2 flex gap-2 overflow-x-auto scroll-thin pb-1"></div></div>`;
+    $('#emo-add').onclick = () => {
+      if (isLocked()) return;
+      t.extra.points.push({ id: uid(), label: 'Paso ' + (t.extra.points.length + 1), score: 60 });
+      commit('journey'); renderEmoList(); renderEmotion();
+    };
+    renderEmoList();
+    return;
+  }
+  panel.innerHTML = '';
+}
+
+function setStkView(v) {
+  const t = toolState('stakeholders'); t.extra.view = v; commit('stakeholders');
+  renderToolPanel(); if (v === 'map') { renderBoard(); }
+}
+function renderStkList() {
+  const t = toolState('stakeholders');
+  $('#board-wrap').classList.add('hidden');
+  const alt = $('#alt-view'); alt.classList.remove('hidden');
+  const opts = Object.entries(STK_TYPES).map(([k, s]) => `<option value="${k}">${s.label}</option>`).join('');
+  const groups = Object.entries(STK_TYPES).map(([k, s]) => {
+    const items = t.extra.list.filter(i => i.type === k);
+    return `<div class="rounded-xl border border-slate-200 p-3">
+      <div class="flex items-center gap-2 mb-2"><span class="w-3 h-3 rounded-sm" style="background:${COLORS[s.color].bg}"></span><span class="font-bold text-sm">${s.label}</span><span class="text-xs text-slate-500">${s.desc}</span><span class="ml-auto text-xs text-slate-400">${items.length}</span></div>
+      <ul class="space-y-1">${items.map(i => `<li class="flex items-center gap-2 text-sm rounded-lg px-2 py-1.5 hover:bg-paper">
+        <span class="flex-1">${esc(i.name)}</span>${i.noteId ? '<span class="text-[11px] text-teal font-semibold">En el mapa</span>' : '<span class="text-[11px] text-slate-400">Pendiente</span>'}
+        <button data-del-stk="${i.id}" class="edit-only text-slate-400 hover:text-[#d7373f] text-lg leading-none" aria-label="Quitar ${esc(i.name)}">×</button></li>`).join('') || '<li class="text-xs text-slate-400 px-2 py-1">Sin actores todavía.</li>'}</ul></div>`;
+  }).join('');
+  alt.innerHTML = `<div class="p-4 sm:p-6 bg-paper">
+    <div class="max-w-4xl mx-auto bg-white rounded-2xl border border-slate-200 p-4 sm:p-6">
+      <h3 class="font-extrabold text-lg">¿Quién influye en tu proyecto?</h3>
+      <p class="text-sm text-slate-500 mt-1">Anota a todos los posibles influenciadores sin filtrar. Después los llevarás a la matriz concéntrica.</p>
+      <form id="stk-form" class="edit-only mt-4 flex flex-col sm:flex-row gap-2">
+        <input id="stk-name" required class="flex-1 rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-brand" placeholder="Ej: Universidad, proveedores, medios locales…">
+        <select id="stk-type" class="rounded-xl border border-slate-200 px-3 py-2">${opts}</select>
+        <button class="pill bg-ink text-white font-semibold px-5 py-2">Añadir</button>
+      </form>
+      <div class="mt-5 grid sm:grid-cols-2 gap-3">${groups}</div>
+      <div class="mt-6 flex justify-end"><button id="stk-go" class="pill bg-teal text-white font-bold px-6 py-3 hover:bg-[#187a77] transition">IR A MAPEAR</button></div>
+    </div></div>`;
+  $('#stk-form').onsubmit = e => {
+    e.preventDefault(); if (isLocked()) return;
+    const name = $('#stk-name').value.trim(); if (!name) return;
+    t.extra.list.push({ id: uid(), name, type: $('#stk-type').value, noteId: null });
+    commit('stakeholders'); renderStkList(); $('#stk-name').focus();
+  };
+  $$('[data-del-stk]', alt).forEach(b => b.onclick = () => {
+    const it = t.extra.list.find(i => i.id === b.dataset.delStk);
+    if (it?.noteId) t.notes = t.notes.filter(n => n.id !== it.noteId);
+    t.extra.list = t.extra.list.filter(i => i.id !== b.dataset.delStk);
+    commit('stakeholders'); renderStkList();
+  });
+  $('#stk-go').onclick = () => { placeStakeholders(); setStkView('map'); };
+}
+function placeStakeholders() {
+  if (isLocked()) return;
+  const t = toolState('stakeholders');
+  const pending = t.extra.list.filter(i => !i.noteId || !t.notes.find(n => n.id === i.noteId));
+  const offsets = { players: -1.2, partners: -0.3, support: 1.4, viewers: 2.4 };
+  Object.keys(STK_TYPES).forEach(type => {
+    const items = pending.filter(i => i.type === type), [rx, ry] = STK_TYPES[type].ring;
+    items.forEach((it, k) => {
+      const ang = offsets[type] + (k / Math.max(items.length, 1)) * Math.PI * (type === 'viewers' ? 2 : 1.1);
+      const x = 600 + rx * Math.cos(ang) - NOTE_W / 2, y = 380 + ry * Math.sin(ang) - NOTE_H / 2;
+      const n = { id: uid(), text: it.name, color: STK_TYPES[type].color, x: Math.round(clamp(x, 0, W - NOTE_W)), y: Math.round(clamp(y, 0, H - NOTE_H)), by: cfg.user };
+      t.notes.push(n); it.noteId = n.id;
+    });
+  });
+  commit('stakeholders');
+}
+
+/* ---------------------------- Curva emocional ---------------------------- */
+const EMO_TOP = 560, EMO_RANGE = 155;
+function emoXY(i, n, s) { return [165 + (i + 0.5) * (1015 / n), EMO_TOP + (1 - s / 100) * EMO_RANGE]; }
+function emotionSVG(t) {
+  const pts = t.extra.points || [], n = pts.length;
+  let h = `<line x1="165" y1="${EMO_TOP}" x2="1175" y2="${EMO_TOP}" stroke="#eef0f3" stroke-width="1.5" stroke-dasharray="4 5"/>
+           <line x1="165" y1="${EMO_TOP + EMO_RANGE}" x2="1175" y2="${EMO_TOP + EMO_RANGE}" stroke="#eef0f3" stroke-width="1.5" stroke-dasharray="4 5"/>
+           <line x1="165" y1="${EMO_TOP + EMO_RANGE / 2}" x2="1175" y2="${EMO_TOP + EMO_RANGE / 2}" stroke="#f3f4f6" stroke-width="1"/>`;
+  if (!n) return h + `<text x="670" y="640" text-anchor="middle" font-size="14" fill="#9aa1a9" font-family="Inter">Añade puntos con «+ Punto emocional» para trazar la curva.</text>`;
+  const xy = pts.map((p, i) => emoXY(i, n, p.score));
+  h += `<polyline points="${xy.map(p => p.join(',')).join(' ')}" fill="none" stroke="#9aa1a9" stroke-width="3" stroke-linejoin="round"/>`;
+  pts.forEach((p, i) => {
+    const [x, y] = xy[i], low = p.score < 40;
+    h += `<g class="pe emo-pt" data-pt="${p.id}"><title>${esc(p.label)}: ${p.score}%</title>
+      <circle cx="${x}" cy="${y}" r="16" fill="${low ? '#e2504c' : '#8a9099'}" stroke="#fff" stroke-width="3"/>
+      <text x="${x}" y="${y + 5}" text-anchor="middle" font-size="14" font-weight="800" fill="#fff" font-family="Inter" style="pointer-events:none">${i + 1}</text>
+      <text x="${x}" y="${y + (y > 690 ? -24 : 34)}" text-anchor="middle" font-size="11" font-weight="600" fill="#6b7280" font-family="Inter" style="pointer-events:none">${esc(p.label.slice(0, 18))}</text></g>`;
+  });
+  return h;
+}
+function renderEmotion() { const svg = $('#emo-svg'); if (svg) { svg.innerHTML = emotionSVG(toolState('journey')); bindEmotion(); } }
+function bindEmotion() {
+  if (current.tool !== 'journey') return;
+  const t = toolState('journey');
+  $$('.emo-pt').forEach(g => {
+    g.addEventListener('pointerdown', e => {
+      if (isLocked()) return; e.preventDefault();
+      const p = t.extra.points.find(p => p.id === g.dataset.pt); if (!p) return;
+      const rect = $('#board').getBoundingClientRect();
+      const move = ev => {
+        const y = (ev.clientY - rect.top) / scale;
+        p.score = Math.round(clamp(100 - (y - EMO_TOP) / EMO_RANGE * 100, 0, 100));
+        const svg = $('#emo-svg'); svg.innerHTML = emotionSVG(t);
+      };
+      const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); bindEmotion(); renderEmoList(); commit('journey'); };
+      window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+    });
+    g.addEventListener('dblclick', () => {
+      if (isLocked()) return;
+      const p = t.extra.points.find(p => p.id === g.dataset.pt);
+      const v = prompt('Nombre del punto emocional', p.label); if (v != null) { p.label = v.trim() || p.label; commit('journey'); renderEmotion(); renderEmoList(); }
+    });
+  });
+}
+function renderEmoList() {
+  const box = $('#emo-list'); if (!box) return;
+  const t = toolState('journey'), ro = isLocked() ? 'disabled' : '';
+  box.innerHTML = t.extra.points.map((p, i) => `
+    <div class="shrink-0 w-[170px] rounded-xl border border-slate-200 px-2.5 py-2 text-xs">
+      <div class="flex items-center gap-1.5"><span class="w-5 h-5 rounded-full grid place-items-center text-white font-bold text-[10px]" style="background:${p.score < 40 ? '#e2504c' : '#8a9099'}">${i + 1}</span>
+        <input ${ro} data-emo-label="${p.id}" value="${esc(p.label)}" class="flex-1 min-w-0 font-semibold outline-none bg-transparent" aria-label="Nombre del punto ${i + 1}">
+        <button data-emo-del="${p.id}" class="edit-only text-slate-400 hover:text-[#d7373f] text-base leading-none" aria-label="Quitar punto">×</button></div>
+      <div class="flex items-center gap-1 mt-1"><span>☹️</span><input ${ro} type="range" min="0" max="100" value="${p.score}" data-emo-score="${p.id}" class="flex-1 accent-[#1F63C6]" aria-label="Satisfacción del punto ${i + 1}"><span>😊</span></div>
+    </div>`).join('') || '<span class="text-xs text-slate-400">Todavía no hay puntos.</span>';
+  $$('[data-emo-label]', box).forEach(i => i.oninput = () => { t.extra.points.find(p => p.id === i.dataset.emoLabel).label = i.value; renderEmotion(); commit('journey'); });
+  $$('[data-emo-score]', box).forEach(i => i.oninput = () => { t.extra.points.find(p => p.id === i.dataset.emoScore).score = +i.value; renderEmotion(); commit('journey'); });
+  $$('[data-emo-del]', box).forEach(b => b.onclick = () => { t.extra.points = t.extra.points.filter(p => p.id !== b.dataset.emoDel); commit('journey'); renderEmoList(); renderEmotion(); });
+}
+
+/* ================================ Guía ================================ */
+function openGuide() {
+  const tool = TOOLS[current.tool], g = tool.guide;
+  $('#guide-body').innerHTML = `
+    <div class="text-xs font-semibold text-slate-400">${tool.sheetSub.replace('/', ' / ')}</div>
+    <h3 class="text-2xl font-extrabold text-ink mt-1">${tool.name}</h3>
+    <h4 class="mt-6 font-bold text-ink">Objetivo pedagógico</h4>
+    <p class="mt-1 text-[15px] leading-relaxed text-slate-600">${esc(g.objetivo)}</p>
+    <h4 class="mt-6 font-bold text-ink">Pasos recomendados en equipo</h4>
+    <ol class="mt-2 space-y-2">${g.pasos.map((p, i) => `<li class="flex gap-3 text-[15px] text-slate-600"><span class="shrink-0 w-6 h-6 rounded-full bg-ink text-white text-xs font-bold grid place-items-center">${i + 1}</span><span class="leading-relaxed">${esc(p)}</span></li>`).join('')}</ol>
+    <h4 class="mt-6 font-bold text-ink">Caso práctico de referencia</h4>
+    <p class="mt-1 text-[15px] leading-relaxed text-slate-600 border-l-4 border-amber pl-3">${esc(g.caso)}</p>
+    ${tool.zones.length ? `<h4 class="mt-6 font-bold text-ink">Qué va en cada sección</h4>
+    <dl class="mt-2 space-y-2">${tool.zones.filter(z => z.hint).map(z => `<div><dt class="text-sm font-semibold text-ink">${esc(z.title || z.id)}</dt><dd class="text-sm text-slate-600">${esc(z.hint)}</dd></div>`).join('')}</dl>` : ''}
+    <button id="guide-example" class="edit-only mt-8 w-full pill bg-ink text-white font-semibold py-3">Cargar ejemplo en el lienzo</button>`;
+  $('#guide-example').onclick = () => { closeGuide(); loadExample(); };
+  $('#guide-overlay').classList.remove('hidden'); $('#guide-panel').classList.remove('translate-x-full');
+}
+function closeGuide() { $('#guide-overlay').classList.add('hidden'); $('#guide-panel').classList.add('translate-x-full'); }
+$$('[data-close-guide]').forEach(b => b.addEventListener('click', closeGuide));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeGuide(); closeModal(); } });
+
+/* =========================== Sidebar colaborativo =========================== */
+function openSidebar(tab) {
+  $('#sidebar').classList.remove('translate-x-full'); document.body.classList.add('sidebar-open');
+  if (tab) selectTab(tab);
+  if (!tab || tab === 'chat') $('#chat-unread').classList.add('hidden');
+}
+function closeSidebar() { $('#sidebar').classList.add('translate-x-full'); document.body.classList.remove('sidebar-open'); }
+$('#btn-sidebar').onclick = () => $('#sidebar').classList.contains('translate-x-full') ? openSidebar() : closeSidebar();
+$('#sb-close').onclick = closeSidebar;
+function selectTab(tab) {
+  $$('.tab-btn').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === tab));
+  $$('.tab-pane').forEach(p => p.classList.toggle('hidden', p.id !== 'pane-' + tab));
+  if (tab === 'chat') { $('#chat-unread').classList.add('hidden'); scrollChat(); }
+}
+$$('.tab-btn').forEach(b => b.onclick = () => selectTab(b.dataset.tab));
+
+/* Chat */
+function renderChat() {
+  const list = $('#chat-list');
+  list.innerHTML = state.chat.length ? state.chat.map(m => {
+    const mine = m.userId === myId;
+    return `<div class="flex gap-2 ${mine ? 'flex-row-reverse' : ''}">
+      <span class="shrink-0 w-8 h-8 rounded-full grid place-items-center text-[11px] font-bold text-white" style="background:${colorFor(m.user)}">${esc(initials(m.user))}</span>
+      <div class="max-w-[75%] ${mine ? 'text-right' : ''}"><div class="text-[11px] text-slate-400">${esc(m.user)} · ${fmtTime(m.ts)}</div>
+      <div class="inline-block mt-0.5 rounded-2xl px-3 py-2 text-sm text-left ${mine ? 'bg-ink text-white' : 'bg-paper text-ink'}">${esc(m.text)}</div></div></div>`;
+  }).join('') : '<p class="text-sm text-slate-400 text-center mt-8">Aún no hay mensajes. Saluda a tu equipo.</p>';
+  scrollChat();
+}
+const scrollChat = () => { const l = $('#chat-list'); l.scrollTop = l.scrollHeight; };
+$('#chat-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const text = $('#chat-input').value.trim(); if (!text) return;
+  const m = { id: uid(), user: cfg.user, userId: myId, text, ts: Date.now() };
+  state.chat.push(m); state.chat = state.chat.slice(-200);
+  saveLocalSoon(); renderChat(); broadcast('chat', m); $('#chat-input').value = '';
+});
+
+/* Blog */
+function renderBlog() {
+  $('#blog-list').innerHTML = state.blog.length ? [...state.blog].reverse().map(b => `
+    <article class="rounded-xl border border-slate-200 p-3">
+      <div class="flex items-start gap-2"><h4 class="font-bold text-sm flex-1">${esc(b.title)}</h4>
+        ${b.userId === myId ? `<button data-del-blog="${b.id}" class="text-slate-400 hover:text-[#d7373f]" aria-label="Eliminar entrada">×</button>` : ''}</div>
+      <p class="text-sm text-slate-600 mt-1 whitespace-pre-wrap">${esc(b.body)}</p>
+      <div class="text-[11px] text-slate-400 mt-2">${esc(b.user)} · ${fmtTime(b.ts)}</div>
+    </article>`).join('') : '<p class="text-sm text-slate-400 text-center mt-6">Usa el blog para registrar acuerdos, aprendizajes y pendientes del proyecto.</p>';
+  $$('[data-del-blog]').forEach(b => b.onclick = () => { state.blog = state.blog.filter(x => x.id !== b.dataset.delBlog); saveLocalSoon(); renderBlog(); broadcast('blog', state.blog); });
+}
+$('#blog-form').addEventListener('submit', e => {
+  e.preventDefault();
+  state.blog.push({ id: uid(), title: $('#blog-title').value.trim(), body: $('#blog-body').value.trim(), user: cfg.user, userId: myId, ts: Date.now() });
+  $('#blog-title').value = ''; $('#blog-body').value = '';
+  saveLocalSoon(); renderBlog(); broadcast('blog', state.blog);
+});
+
+/* Relaciones, hilos y archivos */
+function renderHilos() {
+  const pane = $('#pane-hilos'); if (!pane || !state) return;
+  const t = toolState(current.tool);
+  const label = n => (n.text || '(nota vacía)').replace(/\s+/g, ' ').slice(0, 48);
+  const opts = t.notes.map(n => `<option value="${n.id}" ${n.id === hilosNoteId ? 'selected' : ''}>${esc(label(n))}</option>`).join('');
+  let h = `<div><label class="text-sm font-semibold text-ink">Tarjeta de «${esc(TOOLS[current.tool].name)}»</label>
+    <select id="hilo-select" class="mt-1 w-full rounded-lg border border-slate-200 px-2 py-2 text-sm"><option value="">Elige una tarjeta…</option>${opts}</select>
+    <p class="text-xs text-slate-500 mt-1">También puedes pulsar 🔗 en cualquier post-it.</p></div>`;
+  const n = t.notes.find(x => x.id === hilosNoteId);
+  if (n) {
+    const th = state.threads[n.id] ||= { desc: '', links: [], files: [] };
+    th.links ||= []; th.files ||= [];
+    const ro = isLocked() ? 'readonly' : '';
+    h += `<div class="rounded-xl p-3" style="background:${COLORS[n.color].bg};color:${COLORS[n.color].fg}"><div class="text-sm font-bold whitespace-pre-wrap">${esc(n.text || '(nota vacía)')}</div></div>
+      <div><label class="text-sm font-semibold">Descripción del hilo</label>
+      <textarea ${ro} id="hilo-desc" rows="4" class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-brand" placeholder="Contexto, evidencias, de dónde sale esta idea…">${esc(th.desc)}</textarea></div>
+      <div><div class="text-sm font-semibold">Relacionada con</div>
+        <div class="mt-1 flex flex-wrap gap-1.5">${th.links.map(l => { const m = t.notes.find(x => x.id === l); return m ? `<span class="inline-flex items-center gap-1 rounded-full bg-paper px-2.5 py-1 text-xs"><button data-flash="${l}" class="font-semibold hover:underline">${esc(label(m).slice(0, 26))}</button><button data-unlink="${l}" class="edit-only text-slate-400 hover:text-[#d7373f]" aria-label="Quitar relación">×</button></span>` : ''; }).join('') || '<span class="text-xs text-slate-400">Sin relaciones.</span>'}</div>
+        <div class="edit-only mt-2 flex gap-2"><select id="hilo-link" class="flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"><option value="">Vincular con otra tarjeta…</option>${t.notes.filter(x => x.id !== n.id && !th.links.includes(x.id)).map(x => `<option value="${x.id}">${esc(label(x))}</option>`).join('')}</select>
+        <button id="hilo-link-btn" class="pill bg-ink text-white text-xs font-semibold px-3">Vincular</button></div></div>
+      <div><div class="text-sm font-semibold">Adjuntos</div>
+        <ul class="mt-1 space-y-1">${th.files.map((f, i) => fileRow(f, `data-del-file="${i}"`)).join('') || '<li class="text-xs text-slate-400">Sin archivos.</li>'}</ul>
+        <label class="edit-only mt-2 inline-flex items-center gap-2 pill border border-dashed border-slate-300 px-3 py-1.5 text-sm font-semibold cursor-pointer hover:border-ink">📎 Adjuntar archivos<input id="hilo-files" type="file" multiple class="hidden"></label></div>`;
+  }
+  // Gestor de archivos del proyecto
+  const all = [];
+  Object.values(state.tools).forEach(tt => tt.notes.forEach(nn => (state.threads[nn.id]?.files || []).forEach(f => all.push({ f, n: nn }))));
+  h += `<div class="pt-4 border-t border-slate-200"><div class="text-sm font-bold text-ink">Archivos del proyecto (${all.length})</div>
+    <ul class="mt-2 space-y-1">${all.map(({ f, n }) => fileRow(f, '', label(n))).join('') || '<li class="text-xs text-slate-400">Los archivos adjuntos a cualquier tarjeta aparecerán aquí.</li>'}</ul></div>`;
+  pane.innerHTML = h;
+
+  $('#hilo-select').onchange = e => { hilosNoteId = e.target.value || null; renderHilos(); if (hilosNoteId) flashNote(hilosNoteId); };
+  if (!n) return;
+  const th = state.threads[n.id];
+  const saveThreads = () => { saveLocalSoon(); broadcastThreads(); };
+  $('#hilo-desc').oninput = e => { th.desc = e.target.value; saveThreads(); };
+  $('#hilo-link-btn') && ($('#hilo-link-btn').onclick = () => {
+    const v = $('#hilo-link').value; if (!v || isLocked()) return;
+    th.links.push(v); saveThreads(); renderHilos(); drawLinks(); refreshNoteBadge(n.id);
+  });
+  $$('[data-unlink]', pane).forEach(b => b.onclick = () => { th.links = th.links.filter(l => l !== b.dataset.unlink); saveThreads(); renderHilos(); drawLinks(); });
+  $$('[data-flash]', pane).forEach(b => b.onclick = () => flashNote(b.dataset.flash));
+  $$('[data-del-file]', pane).forEach(b => b.onclick = () => { th.files.splice(+b.dataset.delFile, 1); saveThreads(); renderHilos(); });
+  $('#hilo-files') && ($('#hilo-files').onchange = async e => {
+    for (const file of e.target.files) th.files.push(await storeFile(file));
+    saveThreads(); renderHilos(); refreshNoteBadge(n.id); toast('Archivo adjuntado a la tarjeta.');
+  });
+}
+function fileRow(f, delAttr, from = '') {
+  const size = f.size > 1048576 ? (f.size / 1048576).toFixed(1) + ' MB' : Math.ceil(f.size / 1024) + ' KB';
+  const href = f.url || f.data;
+  return `<li class="flex items-center gap-2 text-sm rounded-lg bg-paper px-2.5 py-1.5">
+    <span>📄</span><span class="flex-1 min-w-0"><span class="block truncate">${href ? `<a class="text-brand hover:underline" href="${esc(href)}" download="${esc(f.name)}" target="_blank" rel="noopener">${esc(f.name)}</a>` : esc(f.name)}</span>
+    <span class="block text-[11px] text-slate-400 truncate">${size}${from ? ' · ' + esc(from) : ''}${href ? '' : ' · solo referencia'}</span></span>
+    ${delAttr ? `<button ${delAttr} class="edit-only text-slate-400 hover:text-[#d7373f]" aria-label="Quitar archivo">×</button>` : ''}</li>`;
+}
+async function storeFile(file) {
+  const meta = { name: file.name, size: file.size, type: file.type, by: cfg.user, ts: Date.now() };
+  // 1) Supabase Storage (bucket público "hermiter-files"), si existe
+  if (sb) {
+    try {
+      const path = `${encodeURIComponent(cfg.room)}/${Date.now()}-${file.name.replace(/[^\w.\-]/g, '_')}`;
+      const { error } = await sb.storage.from('hermiter-files').upload(path, file);
+      if (!error) { meta.url = sb.storage.from('hermiter-files').getPublicUrl(path).data.publicUrl; return meta; }
+    } catch (e) { console.warn('Storage no disponible', e); }
+  }
+  // 2) Archivos pequeños embebidos en el canvas
+  if (file.size <= 400 * 1024) {
+    meta.data = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(file); });
+  }
+  return meta;
+}
+function flashNote(id) { const el = $(`.note[data-id="${id}"]`); if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); } }
+function refreshNoteBadge(id) { const n = findNote(id); const el = $(`.note[data-id="${id}"]`); if (n && el) el.replaceWith(noteEl(n)); drawLinks(); }
+
+/* ======================= Persistencia y tiempo real ======================= */
+const bcTimers = {};
+function commit(toolId) {
+  saveLocalSoon();
+  clearTimeout(bcTimers[toolId]);
+  bcTimers[toolId] = setTimeout(() => broadcast('tool', { id: toolId, data: state.tools[toolId] }), 200);
+}
+const broadcastThreads = debounce(() => broadcast('threads', state.threads), 400);
+function broadcast(event, payload) {
+  if (channel && syncMode === 'online') channel.send({ type: 'broadcast', event, payload }).catch(() => {});
+}
+
+function setSync(mode) {
+  syncMode = mode;
+  const map = {
+    local:      ['#9aa1a9', 'Modo local (sin Supabase)'],
+    connecting: ['#F5A524', 'Conectando con Supabase…'],
+    online:     ['#22c55e', 'En línea (sincronizado vía Supabase)'],
+    error:      ['#d7373f', 'Sin conexión con Supabase: se guarda en este navegador']
+  }[mode];
+  $$('.sync-dot').forEach(d => { d.style.background = map[0]; d.classList.toggle('animate-pulse', mode === 'online'); });
+  $$('.sync-text').forEach(s => s.textContent = map[1]);
+}
+
+async function initSupabase() {
+  if (!cfg.url || !cfg.key || !window.supabase) { setSync('local'); return; }
+  setSync('connecting');
+  try {
+    sb = window.supabase.createClient(cfg.url, cfg.key);
+    // Cargar la versión guardada en la nube si es más reciente
+    const { data, error } = await sb.from('canvases').select('data').eq('room', cfg.room).maybeSingle();
+    if (error) console.warn('Supabase (tabla canvases):', error.message);
+    if (data?.data && (data.data.updatedAt || 0) > (state.updatedAt || 0)) { state = normalizeState(data.data); saveLocal(); renderAll(); }
+
+    channel = sb.channel('hermiter:' + cfg.room, { config: { presence: { key: myId }, broadcast: { self: false } } });
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const ps = channel.presenceState();
+        onlineUsers = Object.values(ps).map(arr => arr[0]).filter(Boolean);
+        renderPresence();
+      })
+      .on('broadcast', { event: 'tool' }, ({ payload }) => {
+        state.tools[payload.id] = payload.data; saveLocalSoon();
+        if (payload.id !== current.tool) return;
+        const editing = document.activeElement?.closest?.('#board') || $('.note.dragging');
+        if (editing) { pendingRemoteRender = true; return; }
+        if (current.tool === 'stakeholders' || current.tool === 'journey') renderToolPanel();
+        if (!$('#board-wrap').classList.contains('hidden')) renderBoard();
+      })
+      .on('broadcast', { event: 'chat' }, ({ payload }) => {
+        state.chat.push(payload); saveLocalSoon(); renderChat();
+        if ($('#sidebar').classList.contains('translate-x-full') || $('#pane-chat').classList.contains('hidden')) $('#chat-unread').classList.remove('hidden');
+      })
+      .on('broadcast', { event: 'blog' }, ({ payload }) => { state.blog = payload; saveLocalSoon(); renderBlog(); })
+      .on('broadcast', { event: 'threads' }, ({ payload }) => { state.threads = payload; saveLocalSoon(); renderHilos(); drawLinks(); })
+      .on('broadcast', { event: 'delivered' }, ({ payload }) => {
+        state.delivered = payload; saveLocalSoon(); renderAll();
+        toast(payload ? 'Un integrante entregó el canvas al profesor.' : 'Se reabrió la edición del canvas.');
+      })
+      .subscribe(async status => {
+        if (status === 'SUBSCRIBED') { await channel.track({ id: myId, name: cfg.user + (readOnlyReview ? ' (revisión)' : ''), at: Date.now() }); setSync('online'); }
+        else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') setSync('error');
+      });
+  } catch (e) { console.error(e); setSync('error'); }
+}
+
+function renderPresence() {
+  const users = onlineUsers.length ? onlineUsers : [{ id: myId, name: cfg.user }];
+  const shown = users.slice(0, 5);
+  $('#presence').innerHTML = shown.map(u => `<span title="${esc(u.name)}${u.id === myId ? ' (tú)' : ''}" class="w-8 h-8 rounded-full ring-2 ring-white grid place-items-center text-[11px] font-bold text-white" style="background:${colorFor(u.name)}">${esc(initials(u.name))}</span>`).join('')
+    + (users.length > 5 ? `<span class="w-8 h-8 rounded-full ring-2 ring-white bg-paper grid place-items-center text-[11px] font-bold">+${users.length - 5}</span>` : '');
+}
+
+async function saveCanvas(silent = false) {
+  saveLocal();
+  if (!sb) { if (!silent) toast('Canvas guardado en este navegador (modo local).'); return true; }
+  const { error } = await sb.from('canvases').upsert({
+    room: cfg.room, data: state, status: state.delivered ? 'entregado' : 'borrador',
+    share_token: state.delivered?.token || null, updated_by: cfg.user, updated_at: new Date().toISOString()
+  });
+  if (error) { toast('Guardado en este navegador. Supabase respondió: ' + error.message, 'warn'); return false; }
+  if (!silent) toast('Canvas guardado en Supabase y en este navegador.');
+  return true;
+}
+$('#btn-save').onclick = () => saveCanvas();
+
+/* ----------------------- Entrega al profesor ----------------------- */
+const shareUrl = () => `${location.origin}${location.pathname}?room=${encodeURIComponent(cfg.room)}&review=${state.delivered.token}`;
+$('#btn-share').onclick = async () => {
+  if (state.delivered) { showShareLink(); return; }
+  if (!(await confirmDialog('Compartir con el profesor', 'El canvas completo (las 8 herramientas) quedará marcado como «Entregado» y en solo lectura para todo el equipo. Se generará un enlace único de revisión.', 'Entregar'))) return;
+  state.delivered = { token: uid() + uid(), at: Date.now(), by: cfg.user };
+  await saveCanvas(true);
+  broadcast('delivered', state.delivered);
+  renderAll(); showShareLink();
+};
+function showShareLink() {
+  const url = shareUrl();
+  openModal(`<h3 class="text-lg font-extrabold">Entregado y listo para revisión</h3>
+    <p class="mt-2 text-sm text-slate-600">Comparte este enlace con tu profesor. Abre el lienzo en modo de solo lectura.</p>
+    <div class="mt-4 flex gap-2"><input readonly id="share-url" class="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-mono bg-paper" value="${esc(url)}">
+    <button id="share-copy" class="pill bg-ink text-white text-sm font-semibold px-4">Copiar</button></div>
+    ${sb ? '' : '<p class="mt-3 text-xs text-amber-700 bg-amber/10 rounded-lg p-2">Estás en modo local: el enlace solo mostrará el lienzo en este navegador. Conecta Supabase para que el profesor lo vea desde cualquier equipo.</p>'}
+    <div class="mt-6 flex justify-end"><button data-modal-close class="pill px-4 py-2 text-sm font-semibold hover:bg-paper">Cerrar</button></div>`);
+  $('#share-copy').onclick = async () => { try { await navigator.clipboard.writeText(url); toast('Enlace copiado.'); } catch { $('#share-url').select(); } };
+}
+async function reopenCanvas() {
+  if (!(await confirmDialog('Reabrir edición', 'El canvas dejará de estar marcado como entregado y el enlace de revisión dejará de ser válido.', 'Reabrir'))) return;
+  state.delivered = null; await saveCanvas(true); broadcast('delivered', null); renderAll();
+}
+
+/* ----------------------- Cambiar de sala ----------------------- */
+$('#btn-exit').onclick = async () => {
+  if (!(await confirmDialog('Cambiar de usuario o sala', 'Tu trabajo queda guardado en este navegador. Podrás volver a entrar con el mismo nombre de sala.', 'Continuar'))) return;
+  saveLocal();
+  try { channel && (await channel.unsubscribe()); } catch {}
+  localStorage.removeItem(LS_CONFIG);
+  location.href = location.pathname;
+};
+
+/* ============================ CHATBOT HERMITER AI ============================ */
+let ai = Object.assign({}, AI_CONFIG, JSON.parse(localStorage.getItem(LS_AI) || '{}'));
+let botWelcomed = {};
+
+const KB_RULES = [
+  { k: ['player', 'partner'], a: 'Un <b>Player</b> participa activamente y de forma directa en la comunidad o el servicio (usa, produce o decide). Un <b>Partner</b> tiene una implicación de segundo grado pero clave: no está en el día a día, pero su apoyo es necesario (alianzas, financiación, regulación).<br><br>Prueba rápida: si mañana desaparece, ¿se detiene la actividad (Player) o se complica a medio plazo (Partner)?' },
+  { k: ['viewer'], a: 'Los <b>Viewers</b> son interesados no implicados: observan, opinan o difunden, pero no participan en la actividad ni la sostienen (medios, consultores, público general). Suelen ir en los anillos exteriores.' },
+  { k: ['support', 'tech', 'proveedor'], a: '<b>Support/Tech</b> agrupa a proveedores, perfiles técnicos o investigativos que habilitan el servicio sin ser el centro de la experiencia: plataformas, laboratorios, fabricantes.' },
+  { k: ['anillo', 'ubicar', 'donde pongo', 'cerca', 'centro'], a: 'La distancia al centro representa <b>cercanía e influencia</b> sobre el actor principal. Pregúntate: ¿con qué frecuencia interactúa? ¿cuánto afectan sus decisiones? Más frecuencia e impacto, más cerca del núcleo.' },
+  { k: ['analogo', 'antilogo'], a: 'Un <b>análogo</b> es un referente al que te gustaría parecerte en un rasgo concreto; un <b>antílogo</b>, uno al que no quieres parecerte. Pueden ser de cualquier sector: lo importante es el rasgo entre paréntesis, ej. «Nike (en la personalización)».' },
+  { k: ['piensa', 'dice'], a: '<b>PIENSA</b> recoge lo que el usuario piensa pero quizá no expresa (dudas, juicios, aspiraciones). <b>DICE</b> recoge frases literales que expresa ante otros. Cuando no coinciden, ahí suele haber un insight: «Dice que la artesanía mola, pero piensa que es cara».' },
+  { k: ['siente'], a: '<b>SIENTE</b> habla de emociones: miedos, frustraciones, orgullo, ilusión. Pregúntate qué le preocupa de verdad y qué le quita el sueño respecto al tema.' },
+  { k: ['oye', ' ve ', 'hace'], a: '<b>OYE</b>: lo que escucha de su entorno (amigos, familia, medios). <b>VE</b>: lo que observa a su alrededor y en el mercado. <b>HACE</b>: comportamientos observables, qué compra, a dónde va, cómo actúa.' },
+  { k: ['como podria', 'como podriamos', 'how might', 'reto', 'redacto'], a: 'Un buen <b>«¿Cómo podría…?»</b> conecta un dolor con una ganancia sin incluir la solución. Fórmula: <i>¿Cómo podría [usuario] + [lograr ganancia] + a pesar de [dolor]?</i><br>Ej: «¿Cómo podría una persona joven que no sabe de vinos sorprender a un entendido?». Si ya menciona una app o producto, es demasiado estrecho.' },
+  { k: ['pregunta', 'guion', 'entrevist'], a: 'Para buenas preguntas: usa preguntas <b>abiertas</b> (qué, cómo, cuándo, por qué), pide historias concretas («cuéntame la última vez que…»), evita sugerir respuestas y pregunta «¿por qué?» varias veces. Deja silencios: el entrevistado suele completar con lo más interesante.' },
+  { k: ['curva', 'emocion', 'satisfaccion', 'carita'], a: 'Para la <b>curva emocional</b>, crea un punto por cada acción del usuario y ajusta su altura: arriba 😊 satisfacción, abajo ☹️ frustración. Arrastra el punto en el lienzo o usa el control deslizante. Los valles (en rojo) son tus mejores oportunidades de diseño.' },
+  { k: ['misterioso', 'personaje', 'visita'], a: 'Para el <b>cliente misterioso</b>, define un personaje realista (edad, situación, poder adquisitivo), la escena donde vivirás la experiencia y máximo tres objetivos de observación. No reveles que investigas y anota justo al salir, cuando la emoción está fresca.' },
+  { k: ['arquetipo', 'persona'], a: 'Un buen <b>arquetipo</b> sale de patrones reales de la investigación, no de suposiciones. Dale nombre y un apodo que lo resuma («Raúl, el aprendiz de chef»), sitúalo en un escenario concreto y conecta sus necesidades con su meta de fondo.' },
+  { k: ['insight'], a: 'Un <b>insight</b> es una verdad no evidente sobre el usuario que explica su comportamiento. Suele surgir de contradicciones (dice vs. hace) o de un «por qué» repetido. Formúlalo: «[Usuario] necesita [necesidad] porque [descubrimiento]».' },
+  { k: ['guardar', 'supabase', 'sincron'], a: 'Todo se guarda automáticamente en este navegador. Con <b>Guardar Canvas</b> se consolida también en Supabase (si está configurado) para que tu equipo y tu profesor lo vean desde cualquier equipo.' },
+  { k: ['entrega', 'profesor', 'compartir'], a: '<b>Compartir con Profesor</b> marca el canvas como entregado, lo deja en solo lectura y genera un enlace único de revisión. Si necesitan corregir algo, pueden reabrir la edición desde el aviso superior.' },
+  { k: ['post-it', 'postit', 'nota', 'tarjeta'], a: 'Un buen post-it contiene <b>una sola idea</b>, en pocas palabras y con letra clara. Doble clic para editar, arrastra para mover, usa la paleta inferior para cambiar el color y la × para borrar. Con 🔗 puedes relacionarla con otras tarjetas y adjuntar archivos.' },
+  { k: ['hola', 'buenas', 'hey'], a: '¡Hola! Pregúntame qué va en cada sección, pídeme un ejemplo de post-it o cuéntame en qué parte te atascaste.' },
+  { k: ['gracias'], a: '¡Con gusto! Sigue así: una idea por post-it y muchas preguntas de «¿por qué?».' }
+];
+
+function responderLocal(mensaje, toolId) {
+  const tool = TOOLS[toolId], m = ' ' + norm(mensaje) + ' ';
+  if (/que va|para que sirve|que es esta|como funciona|que hago/.test(m)) return { text: tool.kb.que };
+  if (/ejemplo/.test(m)) {
+    const ex = tool.kb.ejemplo;
+    return { text: `Aquí tienes un post-it de ejemplo para <b>${esc(tool.name)}</b>:<br><span class="inline-block mt-2 px-3 py-2 rounded font-bold" style="background:${COLORS[ex.color].bg};color:${COLORS[ex.color].fg}">${esc(ex.text)}</span>`, action: { label: 'Añadir al lienzo', note: ex } };
+  }
+  if (/paso|empiezo|empezar|como inicio/.test(m)) return { text: 'Te propongo estos pasos:<br>' + tool.guide.pasos.map((p, i) => `${i + 1}. ${esc(p)}`).join('<br>') };
+  if (/caso|referencia/.test(m)) return { text: esc(tool.guide.caso) };
+  for (const r of KB_RULES) if (r.k.some(k => m.includes(k))) return { text: r.a };
+  const z = tool.zones.find(z => z.title && m.includes(norm(z.title).split(/[ /]/).filter(w => w.length > 3)[0] || '###'));
+  if (z?.hint) return { text: `<b>${esc(z.title)}</b>: ${esc(z.hint)}` };
+  return { text: `No tengo una respuesta exacta para eso, pero en <b>${esc(tool.name)}</b> te puedo ayudar con: qué va en cada sección, ejemplos de post-its, pasos para trabajar en equipo o el caso de referencia. También puedes abrir la 📖 Guía de la Herramienta.` };
+}
+
+/**
+ * Punto de entrada del chatbot. Extensible:
+ *  - Sin API key → base de conocimiento local (responderLocal).
+ *  - Con API key de Gemini u OpenAI → llama al modelo con el contexto de la
+ *    herramienta activa y las notas del lienzo; si falla, vuelve a la base local.
+ * Devuelve { text: HTML seguro, action?: { label, note } }.
+ */
+async function consultarChatbot(mensaje) {
+  const toolId = current.tool;
+  if (ai.provider !== 'local' && ai.apiKey) {
+    try { return await consultarLLM(mensaje, toolId); }
+    catch (e) { console.warn('IA externa no disponible:', e); const r = responderLocal(mensaje, toolId); r.text += '<br><span class="text-[11px] text-slate-400">(Respuesta local: no se pudo contactar al modelo externo.)</span>'; return r; }
+  }
+  await new Promise(r => setTimeout(r, 450));
+  return responderLocal(mensaje, toolId);
+}
+
+async function consultarLLM(mensaje, toolId) {
+  const tool = TOOLS[toolId], t = toolState(toolId);
+  const notas = t.notes.slice(0, 40).map(n => '- ' + n.text.replace(/\s+/g, ' ')).join('\n') || '(sin notas todavía)';
+  const system = `Eres Hesmiter AI, tutor de innovación y design thinking para estudiantes universitarios. Responde en español, en máximo 120 palabras, con tono cercano y práctico; incluye un ejemplo breve cuando ayude. No inventes datos del usuario.
+Herramienta activa: ${tool.name} (${tool.sheetSub}). Objetivo: ${tool.guide.objetivo}
+Secciones: ${tool.zones.map(z => (z.title || z.id) + ': ' + (z.hint || '')).join(' | ') || 'anillos de cercanía con categorías Players, Partners, Viewers y Support/Tech'}
+Notas actuales del equipo:\n${notas}`;
+  const model = ai.model || AI_CONFIG.defaultModels[ai.provider];
+  let text = '';
+  if (ai.provider === 'gemini') {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(ai.apiKey)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: mensaje }] }] })
+    });
+    if (!r.ok) throw new Error('Gemini ' + r.status);
+    const d = await r.json(); text = d.candidates?.[0]?.content?.parts?.map(p => p.text).join('') || '';
+  } else if (ai.provider === 'openai') {
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + ai.apiKey },
+      body: JSON.stringify({ model, messages: [{ role: 'system', content: system }, { role: 'user', content: mensaje }], max_tokens: 400 })
+    });
+    if (!r.ok) throw new Error('OpenAI ' + r.status);
+    const d = await r.json(); text = d.choices?.[0]?.message?.content || '';
+  }
+  if (!text) throw new Error('Respuesta vacía');
+  return { text: esc(text).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>') };
+}
+
+function botAdd(role, html, action) {
+  const list = $('#bot-list');
+  const wrap = document.createElement('div');
+  wrap.className = 'flex ' + (role === 'user' ? 'justify-end' : 'gap-2');
+  wrap.innerHTML = role === 'user'
+    ? `<div class="max-w-[80%] rounded-2xl rounded-br-sm bg-ink text-white px-3 py-2 text-sm">${esc(html)}</div>`
+    : `<span class="shrink-0 w-7 h-7 rounded-full bg-white border border-slate-200 grid place-items-center text-sm">✨</span>
+       <div class="bot-msg max-w-[85%] rounded-2xl rounded-bl-sm bg-white border border-slate-200 px-3 py-2 text-sm text-slate-700 leading-relaxed">${html}${action ? `<div class="mt-2"><button class="edit-only pill bg-teal text-white text-xs font-semibold px-3 py-1">${esc(action.label)}</button></div>` : ''}</div>`;
+  if (action) $('button', wrap).onclick = () => {
+    if (isLocked()) return;
+    const ex = action.note;
+    if (current.tool === 'stakeholders' && toolState('stakeholders').extra.view === 'list') setStkView('map');
+    const [x, y] = zonePoint(current.tool, ex.zone);
+    addNote(current.tool, x, y, ex.text, ex.color, false);
+    flashNote(toolState(current.tool).notes.at(-1).id);
+    toast('Post-it de ejemplo añadido al lienzo.');
+  };
+  list.appendChild(wrap); list.scrollTop = list.scrollHeight;
+}
+function renderBotChips() {
+  const chips = ['¿Qué va en esta herramienta?', 'Dame un ejemplo de post-it', TOOLS[current.tool].kb.chip];
+  $('#bot-chips').innerHTML = chips.map(c => `<button class="pill border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 hover:border-ink hover:text-ink">${esc(c)}</button>`).join('');
+  $$('#bot-chips button').forEach(b => b.onclick = () => botSend(b.textContent));
+}
+async function botSend(text) {
+  text = text.trim(); if (!text) return;
+  botAdd('user', text);
+  const typing = document.createElement('div');
+  typing.className = 'flex gap-2'; typing.innerHTML = '<span class="shrink-0 w-7 h-7 rounded-full bg-white border border-slate-200 grid place-items-center text-sm">✨</span><div class="typing rounded-2xl bg-white border border-slate-200 px-3 py-3"><span></span><span></span><span></span></div>';
+  $('#bot-list').appendChild(typing); $('#bot-list').scrollTop = 1e9;
+  const r = await consultarChatbot(text);
+  typing.remove(); botAdd('bot', r.text, r.action);
+}
+function botToolChanged() {
+  $('#bot-context').textContent = 'Contexto: ' + TOOLS[current.tool].name;
+  renderBotChips();
+  if (!$('#bot-panel').classList.contains('hidden') && !botWelcomed[current.tool]) { botWelcomed[current.tool] = true; botAdd('bot', esc(TOOLS[current.tool].welcome)); }
+}
+function initBot() {
+  $('#ai-provider').value = ai.provider; $('#ai-key').value = ai.apiKey || ''; $('#ai-model').value = ai.model || '';
+  botToolChanged();
+}
+$('#bot-fab').onclick = () => {
+  const p = $('#bot-panel'), open = p.classList.contains('hidden');
+  p.classList.toggle('hidden', !open); p.classList.toggle('flex', open);
+  $('#bot-fab').textContent = open ? '×' : '✨';
+  if (open) { botToolChanged(); setTimeout(() => $('#bot-input').focus(), 50); }
+};
+$('#bot-close').onclick = () => { $('#bot-panel').classList.add('hidden'); $('#bot-panel').classList.remove('flex'); $('#bot-fab').textContent = '✨'; };
+$('#bot-form').addEventListener('submit', e => { e.preventDefault(); const v = $('#bot-input').value; $('#bot-input').value = ''; botSend(v); });
+$('#bot-settings-btn').onclick = () => $('#bot-settings').classList.toggle('hidden');
+$('#bot-settings').addEventListener('submit', e => {
+  e.preventDefault();
+  ai = Object.assign({}, AI_CONFIG, { provider: $('#ai-provider').value, apiKey: $('#ai-key').value.trim(), model: $('#ai-model').value.trim() });
+  localStorage.setItem(LS_AI, JSON.stringify({ provider: ai.provider, apiKey: ai.apiKey, model: ai.model }));
+  $('#bot-settings').classList.add('hidden');
+  toast(ai.provider === 'local' ? 'El tutor usará su base de conocimiento.' : 'El tutor usará ' + (ai.provider === 'gemini' ? 'Gemini' : 'OpenAI') + '.');
+});
+
+/* ================================= Arranque ================================= */
+(function boot() {
+  buildHeroBoard();
+  const p = new URLSearchParams(location.search);
+  if (p.get('review') && p.get('room')) {
+    const stored = loadConfig();
+    readOnlyReview = true; reviewToken = p.get('review');
+    cfg = { url: stored?.url || SUPABASE_URL, key: stored?.key || SUPABASE_ANON_KEY, user: stored?.user || 'Profesor', room: p.get('room') };
+    enterWorkspace();
+  }
+})();
+</script>
+</body>
+</html>
